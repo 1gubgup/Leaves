@@ -11,7 +11,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 #include "Leaves.h"
-#include "LeafField/LeafInteractionSourceComponent.h"
+#include "LeafInteractionSourceComponent.h"
 
 ALeavesCharacter::ALeavesCharacter()
 {

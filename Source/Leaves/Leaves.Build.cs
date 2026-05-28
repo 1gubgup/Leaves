@@ -20,14 +20,14 @@ public class Leaves : ModuleRules
 			"UMG",
 			"Slate",
 			"Niagara",
-			"RenderCore"
+			"RenderCore",
+			"LeafField"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
 
 		PublicIncludePaths.AddRange(new string[] {
 			"Leaves",
-			"Leaves/LeafField",
 			"Leaves/Variant_Platforming",
 			"Leaves/Variant_Platforming/Animation",
 			"Leaves/Variant_Combat",

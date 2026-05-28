@@ -1,0 +1,24 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "LeafField",
+	"Description": "落叶交互风场插件。提供 LeafInteractionFieldSubsystem 和 LeafInteractionSourceComponent，3步接入即可让落叶 Niagara 随角色移动扰动。",
+	"Category": "FX",
+	"CreatedBy": "",
+	"CreatedByURL": "",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"CanContainContent": true,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "LeafField",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	]
+}
