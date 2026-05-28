@@ -41,7 +41,7 @@ namespace LeafFieldParam
 
 // 资产路径常量定义（声明在 .h 里）
 const FString ULeafInteractionFieldSubsystem::VelocityRTAssetPath =
-	TEXT("/LeafField/LeafField/TR_VelocityField.TR_VelocityField");
+	TEXT("/LeafField/LeafField/RT_VelocityField.RT_VelocityField");
 const FString ULeafInteractionFieldSubsystem::SplatMaterialPath =
 	TEXT("/LeafField/LeafField/M_FluidSplat.M_FluidSplat");
 

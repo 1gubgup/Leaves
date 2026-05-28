@@ -93,11 +93,11 @@ Get World Subsystem → ULeafInteractionFieldSubsystem
 | 资产 | 路径 | 作用 |
 |---|---|---|
 | `N_Leaves` | `/LeafField/N_Leaves` | 落叶 Niagara 系统（拖进场景使用） |
-| `TR_VelocityField` | `/LeafField/LeafField/TR_VelocityField` | 速度场 RenderTarget（C++ 自动加载） |
+| `RT_VelocityField` | `/LeafField/LeafField/RT_VelocityField` | 速度场 RenderTarget（C++ 自动加载） |
 | `M_FluidSplat` | `/LeafField/LeafField/M_FluidSplat` | 速度笔刷材质（C++ 自动加载） |
 | `Fab/...` | `/LeafField/Fab/...` | `N_Leaves` 依赖的落叶模型与材质 |
 
-> ⚠️ `TR_VelocityField` 和 `M_FluidSplat` 的资产路径**写死在 `LeafInteractionFieldSubsystem.cpp` 顶部**，不要重命名也不要移动子目录；如确需修改，请同步改 `VelocityRTAssetPath` / `SplatMaterialPath` 两个常量并重新编译。
+> ⚠️ `RT_VelocityField` 和 `M_FluidSplat` 的资产路径**写死在 `LeafInteractionFieldSubsystem.cpp` 顶部**，不要重命名也不要移动子目录；如确需修改，请同步改 `VelocityRTAssetPath` / `SplatMaterialPath` 两个常量并重新编译。
 
 ---
 
@@ -106,7 +106,7 @@ Get World Subsystem → ULeafInteractionFieldSubsystem
 | 现象 | 检查 |
 |---|---|
 | 落叶完全不动 | ① Niagara Actor 是否加了 Tag `LeafField`（注意大小写）；② 主角是否真的挂上了 `LeafInteractionSource` 组件；③ 主角是否在风场范围内（`CaptureWidth` 默认 500cm 即玩家周围 5m 见方）。 |
-| 人停下后落叶往一个固定方向飘 | 这是早期遇到过的 bug：`TR_VelocityField` 的 ClearColor 必须是 `(0.5, 0.5, 0, 1)`（编码后的"零速度"）。代码里 `Initialize` 已自动设置，但若你手改过资产，请把 ClearColor 还原。 |
+| 人停下后落叶往一个固定方向飘 | 这是早期遇到过的 bug：`RT_VelocityField` 的 ClearColor 必须是 `(0.5, 0.5, 0, 1)`（编码后的"零速度"）。代码里 `Initialize` 已自动设置，但若你手改过资产，请把 ClearColor 还原。 |
 | 落叶只在世界原点附近响应 | `CaptureCenter` 没跟随主角。代码里取的是 `PlayerController(0)->GetPawn()->GetActorLocation()`——确认场景里有合法的本地玩家 Pawn。 |
 | 落叶穿过地面 | 进 `N_Leaves` 改 `LF_GroundCollision` 模块的 `GroundZ` 常量（默认 0）。该模块只做 Z 平面检测，不查物理世界。 |
 
@@ -139,26 +139,26 @@ GetVelocityXY()                   2) ClearRT → 编码零 (0.5,0.5,0,1)
    - BeginPlay 自动 `RegisterSource`，EndPlay 自动 `UnregisterSource`。
 
 2. **`ULeafInteractionFieldSubsystem`（World Subsystem）**
-   - 持有一张 `RTSize × RTSize` 的 RenderTarget（`RTSize=256`，写死在 .h 里；格式以资产 `TR_VelocityField` 为准，当前为 RG8）。
-   - 每帧 Tick 顺序：跟随主角 → `ClearRenderTarget2D` 清成编码零 `(0.5, 0.5, 0, 1)` → Splat 阶段画笔刷 → Push 阶段把 RT/参数推给所有 Niagara 组件。
-   - `CaptureCenter` 取本地 PlayerController 的 Pawn 位置，所以风场是 **以玩家为中心的滑动窗口**——超出 `1.1 × CaptureWidth` 范围的 Source 直接裁掉，不浪费像素。
+   - 持有一张 `RTSize × RTSize` 的 RenderTarget（**`RTSize = 128`**，写死在 .h 里；格式以资产 `RT_VelocityField` 为准，当前为 RG8）。优先 `LoadObject` 加载磁盘资产；若加载失败则 fallback 到 `CreateRenderTarget2D` 动态新建一张同尺寸 RG8。
+   - **限频更新**：内部常量 `UpdateRateHz = 30.f`（写死在 .h 里），用累加器节流——风场 30Hz 更新即可，Niagara 端的 lerp 会平滑掉视觉差。设 0 则每帧更新。
+   - **速度归一化**：`VelocityScale = 600 cm/s`，Splat 前 `NormVel = SourceVel / VelocityScale` 后映射到 RG8。源端的速度若超过 600，材质里 `*0.5+0.5` 会越界，由 Niagara 端的 `length(NormVel)>1` 钳到单位长度兜底。
+   - 每帧 Tick 顺序：限频检查 → 跟随主角 → `ClearRenderTarget2D` 清成编码零 `(0.5, 0.5, 0, 1)` → Splat 阶段画笔刷 → Push 阶段把 RT/参数推给所有 Niagara 组件。
+   - `CaptureCenter` 取本地 PlayerController 的 Pawn 位置，所以风场是 **以玩家为中心的滑动窗口**——Source 的 UV 落在 `[-0.1, 1.1]` 之外（约等于 ±10% × CaptureWidth 边距）就跳过 Splat，不浪费像素。
    - Niagara 组件采用 **lazy 缓存 + `OnActorSpawned` 增量维护**：第一次 `PushToNiagara` 缓存为空时全场扫一次，之后新生成的带 Tag Actor 由 spawn 回调自动加入，避免每帧 `TActorIterator` 扫场。
 
 3. **`LF_SampleWindField`（Niagara 自定义 Scratch 模块）**
-   按 N_Leaves 中的实际实现，每帧逻辑如下：
+   > ⚠️ 以下是**模块的设计意图**说明，不是从 `.uasset` 中逐节点核对得到的——若你重新编辑过 Scratch 内容，以编辑器内的实际节点图为准。
    - 把粒子世界坐标换算成 UV：`UV = (InPos.xy - (Center.xy - Width/2)) / Width`。
    - 仅当 UV ∈ [0,1]² 时进入风场处理；否则保持原速度。
-   - 采样 RT 的 RG 通道并解码：`NormVel = (Sample.rg - 0.5) * 2`；若 `length(NormVel) > 1` 钳到单位长度（防编码端轻微越界）。
-   - 构造目标风速：水平 `HorizontalVel = NormVel * MaxSpd * Strength`，垂直分量 `LiftZ = |HorizontalVel| * Lift`；这里的 `MaxSpd / Strength / Lift` 直接对应 User Parameter `MaxWindSpeed / WindStrength / VerticalLift`。
-   - **每粒子扰动**（用 `Particles.UniqueID` 生成稳定伪随机数，不随帧抖动）：
-     - 方向噪声：`WindVel.xy += RandDir * HSpeed * NoiseScale`，`NoiseScale = 0.25`，让每片叶子飞出去的方向略有差异。
-     - 个体响应时间：每粒子有自己的 `PersonalResponse ∈ [0.05, 0.35]` 秒，用 `Alpha = saturate(DT / PersonalResponse)` 做插值，让有的叶子敏捷、有的飘逸。
-   - 最终输出：`OutVel = lerp(InVel, WindVel, Alpha)`。**注意是 lerp 替换，不是叠加**——所以风场内粒子的速度会被风"接管"，而不是在原速度上加风。
+   - 采样 RT 的 RG 通道并解码：`NormVel = (Sample.rg - 0.5) * 2`，必要时把长度钳到 1（防编码端越界）。
+   - 构造目标风速：水平分量 ≈ `NormVel * MaxWindSpeed * WindStrength`，垂直分量 ≈ `|水平| * VerticalLift`；这三个 User Parameter 由 C++ 每帧 push。
+   - 输出方式为 **lerp 替换**：`OutVel = lerp(InVel, WindVel, Alpha)`——风场内粒子的速度被风"接管"，不是叠加。
 
 4. **`LF_GroundCollision`（Niagara 自定义 Scratch 模块）**
-   - 判定 `In_Position.z <= GroundZ`（`GroundZ` 是模块里写死的常量，默认 0）。
-   - 落地时**直接贴地停住**：把 `Velocity` 与 `RotationalVelocity` 全部清零，`Position.z` 钳到 `GroundZ`。**不反弹**。
-   - 不做 trace、不查物理世界，仅一次标量比较，开销几乎为零。仅适合平地场景；非平地需要把 `GroundZ` 改成实际地面 Z 值。
+   > ⚠️ 同上，是设计意图描述，未从 `.uasset` 节点图核对。
+   - 判定 `Position.z <= GroundZ`（`GroundZ` 在模块内是常量，默认 0）。
+   - 落地后把粒子贴地：`Velocity / RotationalVelocity` 清零，`Position.z = GroundZ`。**不反弹**。
+   - 不做 trace、不查物理世界，仅一次标量比较，开销几乎为零。仅适合平地；非平地需要把 `GroundZ` 改成实际地面 Z 值。
 
 ### Niagara User Parameter 数据流
 
