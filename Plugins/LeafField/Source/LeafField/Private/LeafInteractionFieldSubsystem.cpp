@@ -4,7 +4,6 @@
 #include "LeafInteractionSourceComponent.h"
 
 #include "Engine/World.h"
-#include "Engine/Canvas.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
@@ -12,7 +11,6 @@
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetRenderingLibrary.h"
-#include "CanvasItem.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
@@ -182,21 +180,35 @@ void ULeafInteractionFieldSubsystem::Tick(float DeltaTime)
 
 void ULeafInteractionFieldSubsystem::SplatPass()
 {
+	// ----------------------------------------------------------------------------------------
+	// 「取最大」策略 + DrawMaterialToRenderTarget 一次全屏写入。
+	//
+	// 为什么这么写：
+	//  1) UE5.7 mobile 渲染路径下，FCanvas::DrawTile → FRendererModule::DrawTileMesh 会触发
+	//     RenderGraphValidation.cpp 的 checkf 断言（SinglePrimitiveInstanceTextureView.Upload
+	//     Pass 缺 NeverCull 标记），Android Development 包必崩。r.RDG.Debug 是 cvar，无法关掉
+	//     编译期 checkf。唯一根治方式：从代码层移除 FCanvas 路径，改走 DrawMaterialToRenderTarget。
+	//  2) 取最大：当前风场仅 5m，多 Source（主角 + 武器 + BOSS）高度重叠，挑 |V| 最大者写入即可，
+	//     视觉上等价于"跑得快的盖过跑得慢的"，O(N) 选举 + 1 次全屏 Pass，比逐 Source DrawTile
+	//     在 N≥2 时还省。
+	//
+	// 升级钩子：未来若需要真正叠加多个 Source（而不是取最大），把这里换成 Ping-Pong 双 RT：
+	//     - 每帧拿前一帧 RT 当输入纹理（或本帧 RT_Temp）；
+	//     - 对每个 Source 用一个"读旧值 + 写新值"的累加材质 DrawMaterialToRenderTarget；
+	//     - 保留 ClearRenderTarget2D 在 Tick 顶端做基准重置（或改成不清，做拖尾）。
+	//   头文件接口、Niagara 端、RT 资产都不需要改，只在 SplatPass 内部替换。
+	// ----------------------------------------------------------------------------------------
+
 	if (!SplatMID || !RT || Sources.Num() == 0) return;
-
-	UCanvas* Canvas = nullptr;
-	FVector2D CanvasSize = FVector2D::ZeroVector;
-	FDrawToRenderTargetContext Ctx;
-	UKismetRenderingLibrary::BeginDrawCanvasToRenderTarget(this, RT, Canvas, CanvasSize, Ctx);
-
-	if (!Canvas)
-	{
-		UKismetRenderingLibrary::EndDrawCanvasToRenderTarget(this, Ctx);
-		return;
-	}
 
 	const float InvVelScale = (VelocityScale > KINDA_SMALL_NUMBER) ? (1.f / VelocityScale) : 1.f;
 
+	FVector2D WinUV(0.f, 0.f);
+	FVector2D WinNormVel(0.f, 0.f);
+	float     WinRadius = 0.f;
+	float     WinMagSq  = -1.f; // < 0 表示尚无赢家
+
+	// O(N) 选举：剔除 UV 出界的 Source，比较 |NormVel|² 取最大
 	for (auto It = Sources.CreateIterator(); It; ++It)
 	{
 		ULeafInteractionSourceComponent* Src = It->Get();
@@ -211,23 +223,29 @@ void ULeafInteractionFieldSubsystem::SplatPass()
 
 		// NormVel ∈ ~[-1,1]，材质内部完成 *0.5+0.5 编码
 		const FVector2D NormVel = Src->GetVelocityXY() * InvVelScale;
+		const float MagSq = NormVel.SizeSquared();
 
-		SplatMID->SetVectorParameterValue(LeafFieldParam::P_SplatCenterUV,
-			FLinearColor(UV.X, UV.Y, 0.f, 0.f));
-		SplatMID->SetScalarParameterValue(LeafFieldParam::P_SplatRadiusUV, Src->BrushRadiusUV);
-		SplatMID->SetVectorParameterValue(LeafFieldParam::P_SplatVelocity,
-			FLinearColor(NormVel.X, NormVel.Y, 0.f, 1.f));
-
-		// 略大于半径，留 falloff 余量
-		const float RadiusPx = Src->BrushRadiusUV * CanvasSize.X * 1.2f;
-		const FVector2D TopLeft = UV * CanvasSize - FVector2D(RadiusPx, RadiusPx);
-		const FVector2D SizePx(RadiusPx * 2.f, RadiusPx * 2.f);
-
-		FCanvasTileItem TileItem(TopLeft, SplatMID->GetRenderProxy(), SizePx);
-		Canvas->DrawItem(TileItem);
+		if (MagSq > WinMagSq)
+		{
+			WinMagSq    = MagSq;
+			WinUV       = UV;
+			WinNormVel  = NormVel;
+			WinRadius   = Src->BrushRadiusUV;
+		}
 	}
 
-	UKismetRenderingLibrary::EndDrawCanvasToRenderTarget(this, Ctx);
+	// 全部出界 / 全部失效 → 直接 return：Tick 顶端的 ClearRenderTarget2D 已把 RT 清成编码零，
+	// 不需要再走一次全屏 Pass，省一次绘制。
+	if (WinMagSq < 0.f) return;
+
+	// 写赢家参数到 MID，然后一次全屏绘制
+	SplatMID->SetVectorParameterValue(LeafFieldParam::P_SplatCenterUV,
+		FLinearColor(WinUV.X, WinUV.Y, 0.f, 0.f));
+	SplatMID->SetScalarParameterValue(LeafFieldParam::P_SplatRadiusUV, WinRadius);
+	SplatMID->SetVectorParameterValue(LeafFieldParam::P_SplatVelocity,
+		FLinearColor(WinNormVel.X, WinNormVel.Y, 0.f, 1.f));
+
+	UKismetRenderingLibrary::DrawMaterialToRenderTarget(this, RT, SplatMID);
 }
 
 void ULeafInteractionFieldSubsystem::PushToNiagara()

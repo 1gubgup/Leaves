@@ -94,7 +94,7 @@ private:
 	/** 速度场 RT 资产路径。 */
 	static const FString VelocityRTAssetPath;
 
-	/** Splat 材质路径（Surface Domain + AlphaComposite + Unlit）。 */
+	/** Splat 材质路径（User Interface Domain + Opaque，配合 DrawMaterialToRenderTarget）。 */
 	static const FString SplatMaterialPath;
 
 	// ---------- Helpers ----------
