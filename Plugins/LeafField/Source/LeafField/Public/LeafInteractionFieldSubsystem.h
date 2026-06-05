@@ -68,7 +68,7 @@ public:
 
 	/** 水平风速 → 向上抬升的比例。想飘更高 → 0.5~0.8。 */
 	UPROPERTY(EditAnywhere, Category = "LeafField|Wind", meta = (ClampMin = "0.0"))
-	float VerticalLift = 0.3f;
+	float VerticalLift = 0.5f;
 
 	/** 风对粒子的最大速度上限（cm/s）。想飞更快 → 1200~1600。 */
 	UPROPERTY(EditAnywhere, Category = "LeafField|Wind", meta = (ClampMin = "0.0"))
