@@ -7,14 +7,13 @@
 #include "LeafInteractionSourceComponent.generated.h"
 
 /**
- * 落叶交互速度场的"扰动源"组件。
- * 挂到任何会"扇起落叶"的 Actor 上（主角、敌人、可移动物体等）。
+ * 落叶交互的"扰动源"组件，挂在角色（或任何会扇起叶子的 Actor）身上。
  *
- * 自身不直接写 RT，仅负责：
- *   1) 在 World 的 ULeafInteractionFieldSubsystem 中登记/注销自己
- *   2) 暴露半径 / 强度 / 速度计算给 Subsystem 读取
+ * 职责：
+ *   - 在 ULeafFieldSubsystem 中登记/注销自己
+ *   - 通过 Owner 位置差分得出当前帧速度，供 Subsystem 写入全局速度场
  *
- * 速度来源：默认通过 Owner 的位置差分得出（无须 Movement Component）。
+ * 不直接读写 RT，不依赖 Movement Component。
  */
 UCLASS(ClassGroup = (FX), meta = (BlueprintSpawnableComponent))
 class LEAFFIELD_API ULeafInteractionSourceComponent : public UActorComponent
@@ -24,29 +23,29 @@ class LEAFFIELD_API ULeafInteractionSourceComponent : public UActorComponent
 public:
 	ULeafInteractionSourceComponent();
 
-	/** 笔刷半径（UV 空间，0~1）。0.1 ≈ 覆盖 CaptureWidth 的 10%。
-	 *  CaptureWidth=500cm 时：0.2≈100cm、0.35≈175cm、0.5≈250cm 半径。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField", meta = (ClampMin = "0.01", ClampMax = "0.8"))
+	/** Splat 笔刷半径（UV 空间，0~1）。在 VelocityFieldWidth=500cm 时：0.2≈100cm、0.35≈175cm 半径 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField",
+		meta = (ClampMin = "0.01", ClampMax = "0.8"))
 	float BrushRadiusUV = 0.35f;
 
-	/** 速度强度倍率，1.0 表示原速度直接写入 RT；调大可让落叶更"炸"。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField", meta = (ClampMin = "0.0"))
+	/** 速度倍率，调大让叶子被扇得更猛 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField",
+		meta = (ClampMin = "0.0"))
 	float VelocityStrength = 1.0f;
 
-	/** 速度衰减时间常数（秒）。主角停下后，上报速度按 exp(-dt/Tau) 衰减。
-	 *  0 = 不衰减（瞬时，老行为）；0.2~0.3 = 短促拖尾；0.6~1.0 = 明显风过留香。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField", meta = (ClampMin = "0.0"))
+	/** 速度衰减时间常数（秒）。0 = 瞬时无衰减；0.2~0.3 = 短促拖尾；0.6~1.0 = 风过留香 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField",
+		meta = (ClampMin = "0.0"))
 	float VelocityDecayTime = 0.25f;
 
-	/** 是否使用"峰值保持"上报：本帧瞬时速度比衰减后的缓存大就立刻刷新。
-	 *  true：起步零延迟、停步柔和衰减（推荐）；false：纯低通（起步也会有一点延迟）。 */
+	/** 峰值保持：起步零延迟、停步柔和衰减（推荐 true）；false = 纯低通（起步也有延迟） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField")
 	bool bUsePeakHold = true;
 
-	/** 取得当前帧速度（cm/s，世界空间 XY）。基于位置差分 + 衰减。 */
+	/** 当前帧速度（cm/s，世界空间 XY） */
 	FVector2D GetVelocityXY() const { return CachedVelocityXY; }
 
-	/** 取得 Owner 的世界位置。 */
+	/** Owner 世界位置 */
 	FVector GetSourceWorldLocation() const;
 
 protected:

@@ -1,6 +1,9 @@
-# LeafField 落叶交互风场
+# LeafField 地面落叶交互 Field
 
-角色经过时实时扰动落叶 Niagara 粒子的 UE5 源码插件。
+可拖入关卡的地面叶子交互插件。设计师把 `BP_LeafField` 拖到关卡并调用 `ActivateField()`，
+一次性 Spawn 一批贴地静止的叶子；角色经过时叶子被实时"扇起"，落下后重新贴地静止。
+
+> 更详细的实现说明见 [`Plugins/LeafField/ARCHITECTURE.md`](Plugins/LeafField/ARCHITECTURE.md)。
 
 ---
 
@@ -9,72 +12,74 @@
 ### 1. 启用插件
 将 `Plugins/LeafField/` 整个目录拷贝至项目 `Plugins/` 下，重启编辑器并完成编译。
 
-### 2. 主角挂载组件
-打开主角的 Character / Pawn 蓝图 → `Add Component` → 添加 **LeafInteractionSource**。使用默认参数即可。
+### 2. 主角挂载扰动源组件
+打开主角的 Character / Pawn 蓝图 → `Add Component` → 添加 **LeafInteractionSource**。
+默认参数即可，没有这个组件叶子不会被任何角色扰动。
 
-### 3. 场景中放置落叶
-1. Content Browser 右下角 **Settings** → 勾选 **Show Plugin Content**。
-2. 在 `LeafField Content` 中将 **`N_Leaves`** 拖入场景。
-3. 选中该 Niagara Actor → Details → **Tags** → 添加一项 **`LeafField`**（区分大小写）。
+### 3. 关卡中放置 Field
+1. 把 `ALeafInteractionField`（或其蓝图子类 `BP_LeafField`）拖入关卡，放到铺叶子的位置。
+2. 选中它，在 Details 面板设置：
+   - **`LeafSystem`**：指向 `N_LeafField`（必填）。
+   - **`LeafMeshes`**：添加 1~4 项，每项选一个叶片 `Static Mesh`，可选填 `Weight`（出现权重）。
+   - 按需调整 `FieldExtent`（铺叶半径）、`LeafCount`（数量）、`Wind*`（风感）等。
 
-完成后进入 Play 即可看到落叶被扰动。
+### 4. 激活 Field
+Field 默认处于 **Dormant**（不生成叶子）。需要由外部逻辑调用一次激活，例如在关卡蓝图
+`BeginPlay`、GameMode 或剧情触发里：
+
+```
+Get Actor (BP_LeafField) → Activate Field
+```
+
+`ActivateField()` / `DeactivateField()` 均为蓝图可调用且幂等，可随时开关。
 
 ---
 
 ## 调整效果
 
-主要调节参数集中在以下三处。
+### A. 单个 Field 的叶子与风感 —— `ALeafInteractionField`
 
-### A. 单个角色的扰动范围 —— `LeafInteractionSource` 组件
+选中关卡里的 Field Actor，在 Details 面板调整（每个 Field 互相独立）：
 
-选中挂载组件的角色，在组件 Details 面板中调整：
+| 分类 | 参数 | 默认值 | 说明 |
+|---|---|---|---|
+| Asset | `LeafSystem` | — | Niagara System，指向 `N_LeafField`（必填） |
+| Asset | `LeafMeshes` | — | 叶片网格列表（最多 4 种），每项 = Mesh + Weight。空槽权重自动锁 0、不参与随机 |
+| Layout | `FieldExtent` | (500,500,10) | 铺叶半尺寸 cm，XY = 撒布半径，Z = 可视化框高度 |
+| Appearance | `LeafCount` | 1024 | Spawn Burst 叶子数量 |
+| Appearance | `GroundOffset` | 5 | 叶片贴地安全距离 cm |
+| Wind | `WindStrength` | 1.0 | 本 Field 风强度倍率（0~5） |
+| Wind | `WindLift` | 0.5 | 水平风转上抬力比例（0~1） |
+| Wind | `WindNoiseScale` | 0.2 | 方向随机扰动强度（0~1） |
+| Wind | `WindResponseMin/Max` | 0.05 / 0.1 | 叶子响应风力的最快/最慢时间（秒） |
+| Wind | `WindSpinImpulse` | 1.0 | 被风踢起时的旋转冲量强度（0~10） |
+| Advanced | `HeightCaptureZOffset` | 2000 | 高度相机在原点上方拍摄高度 cm |
+| Advanced | `GroundBlendHeight` | 18 | 贴地过渡区高度 cm |
 
-| 参数 | 默认值 | 说明 |
-|---|---|---|
-| `Brush Radius UV` | 0.35 | 该角色扰动落叶的半径。0.35 约 1.7m，0.5 约 2.5m |
-| `Velocity Strength` | 1.0 | 该角色的扰动强度倍率。BOSS 等大型单位可调至 2~3 |
+**多种叶子混撒**：在 `LeafMeshes` 里加多项即可。`Weight` 为整数比例、无需手动归一化，
+例如三项权重 `[2, 1, 1]` → 出现概率 50% / 25% / 25%；留空的项默认权重 1，Mesh 空着的项权重锁 0。
 
-其他参数（`Velocity Decay Time`、`bUsePeakHold`）保持默认即可，用于精细调节起步与停步时的拖尾手感。
+### B. 单个角色的扰动范围 —— `LeafInteractionSource` 组件
 
-### B. 落叶本体的物理与外观 —— `N_Leaves` Niagara 资产
-
-双击打开 `N_Leaves`，在对应模块中调整：
-
-| 想调整的效果 | 修改位置 |
-|---|---|
-| 落叶数量 | `Spawn Rate` |
-| 落叶生命周期 | `Particle State` 的 Lifetime |
-| 重力大小 | `Gravity Force` |
-| 空气阻力 | `Drag` |
-| 落叶贴图 / 颜色 | Render 阶段 `Sprite Renderer` 的 Material |
-| 初始散布范围 | `Shape Location` |
-| 落叶地面高度 | `LF_GroundCollision` 的 `GroundZ`（默认 0） |
-
-如需做完全不同风格的落叶（樱花、雪花等），复制 `N_Leaves` 修改副本即可，无需改动 C++。
-
-### C. 风场整体强度 —— C++ 默认值或运行时蓝图
-
-风场总控参数定义在 `ULeafInteractionFieldSubsystem` 中，主要调节项：
+选中挂载组件的角色，在组件 Details 面板调整：
 
 | 参数 | 默认值 | 说明 |
 |---|---|---|
-| `WindStrength` | 1.0 | 风强度倍率。更猛 → 1.5~2.5；更轻柔 → 0.3~0.6 |
-| `VerticalLift` | 0.5 | 水平风转化为上抬力的比例。让落叶飘得更高 → 0.5~0.8 |
-| `MaxWindSpeed` | 800 | 风对粒子的速度上限（cm/s）。让落叶被吹得更快 → 1200~1600 |
+| `BrushRadiusUV` | 0.35 | 该角色扰动叶子的半径（UV 空间）；速度场 500cm 时约 175cm |
+| `VelocityStrength` | 1.0 | 扰动强度倍率，BOSS 等大型单位可调至 2~3 |
+| `VelocityDecayTime` | 0.25 | 停步后速度衰减时间常数（秒） |
+| `bUsePeakHold` | true | 峰值保持（起步无延迟、停步柔和衰减） |
 
-调整方式有两种：
+### C. 全局基准 —— 项目设置 → 插件 → Leaf Field
 
-**方式 1：修改 C++ 默认值（持久生效）**
-编辑 `LeafInteractionFieldSubsystem.h` 中对应字段的初值，重新编译。
+必须全局一致的参数（编解码端共享），在 `ULeafFieldSettings`：
 
-**方式 2：运行时蓝图修改（即时生效）**
-适用于 BOSS 出场风变猛、剧情阶段风变弱等动态效果：
-
-```
-Get World Subsystem (LeafInteractionFieldSubsystem) → Set Wind Strength / Set Vertical Lift / Set Max Wind Speed
-```
-
-下一帧立即生效。
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `HeightRTSize` | 256 | 高度图 RT 分辨率（px），改后重启 PIE |
+| `VelocityFieldWidth` | 500 | 速度场覆盖边长 cm（以本地 Pawn 为中心） |
+| `VelocityFieldRTSize` | 128 | 速度场 RT 分辨率（px） |
+| `WindMaxSpeed` | 500 | RG8 速度编码基准 cm/s，编解码端必须一致 |
 
 ---
 
@@ -82,10 +87,12 @@ Get World Subsystem (LeafInteractionFieldSubsystem) → Set Wind Strength / Set 
 
 | 现象 | 检查项 |
 |---|---|
-| 落叶完全不动 | ① Niagara Actor 是否添加了 Tag = `LeafField`（区分大小写）<br>② 主角是否挂载了 `LeafInteractionSource` 组件<br>③ 主角是否在 Niagara Actor 周围 5m 范围内 |
-| 落叶穿过地面 | 打开 `N_Leaves` → `LF_GroundCollision` 模块 → 将 `GroundZ` 改为实际地面高度 |
-| 人停下后落叶向固定方向飘 | `RT_VelocityField` 的 ClearColor 必须为 `(0.5, 0.5, 0, 1)`，若被误改请还原 |
-| 落叶仅在世界原点附近响应 | 风场以本地玩家 Pawn 为中心，确认场景中存在合法的 PlayerController 与 Pawn |
+| 叶子完全不出现 | ① 是否调用了 `ActivateField()`（默认 Dormant 不生成）<br>② `LeafSystem` 是否指向 `N_LeafField`<br>③ `LeafMeshes` 是否至少有一项填了有效 Mesh |
+| 叶子出现但不被扰动 | ① 主角是否挂载了 `LeafInteractionSource` 组件<br>② 角色是否在速度场覆盖范围内（`VelocityFieldWidth`，默认 5m，以本地 Pawn 为中心） |
+| 叶子穿地 / 悬空 | 调整 `GroundOffset`，并确认 `HeightCaptureZOffset` 高于地形（默认 20m） |
+| 运行时改了地形叶子没跟上 | 地形默认只拍一次高度图；将 `bHeightCaptured` 重置为 false 后重新 `ActivateField()` |
+| 人停下后叶子向固定方向飘 | `RT_VelocityField` 的 ClearColor 必须为 `(0.5, 0.5, 0, 1)`，若被误改请还原 |
+| 叶子仅在世界原点附近响应 | 速度场以本地玩家 Pawn 为中心，确认场景存在合法的 PlayerController 与 Pawn |
 
 ---
 
@@ -93,8 +100,8 @@ Get World Subsystem (LeafInteractionFieldSubsystem) → Set Wind Strength / Set 
 
 | 资产 | 用途 |
 |---|---|
-| `N_Leaves` | 落叶 Niagara 系统，需拖入场景使用 |
-| `RT_VelocityField` | 速度场 RenderTarget，C++ 自动加载 |
+| `N_LeafField` | 叶子 Niagara 系统，由 Field 的 `LeafSystem` 引用 |
+| `RT_VelocityField` | 速度场 RG8 渲染目标，C++ 自动加载 |
 | `M_FluidSplat` | 速度笔刷材质，C++ 自动加载 |
 
 `RT_VelocityField` 与 `M_FluidSplat` 的资产路径写死在代码中，不要重命名或移动。
@@ -103,4 +110,5 @@ Get World Subsystem (LeafInteractionFieldSubsystem) → Set Wind Strength / Set 
 
 ## 工作原理
 
-角色移动产生的速度被采集到一张以玩家为中心的速度场贴图中，Niagara 粒子按自身位置采样该贴图获得风速，从而被实时扰动。
+角色移动产生的速度被采集到一张以本地玩家为中心的速度场贴图（RG8）中，Niagara 粒子按自身
+世界位置采样该贴图获得风速，从而被实时扇起；叶子下落时采样地形高度图对齐法线并贴地静止。

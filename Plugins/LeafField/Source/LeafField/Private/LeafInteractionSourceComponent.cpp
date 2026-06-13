@@ -1,7 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "LeafInteractionSourceComponent.h"
-#include "LeafInteractionFieldSubsystem.h"
+#include "LeafFieldSubsystem.h"
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
 
@@ -28,7 +28,7 @@ void ULeafInteractionSourceComponent::BeginPlay()
 
 	if (UWorld* World = GetWorld())
 	{
-		if (ULeafInteractionFieldSubsystem* Sub = World->GetSubsystem<ULeafInteractionFieldSubsystem>())
+		if (ULeafFieldSubsystem* Sub = World->GetSubsystem<ULeafFieldSubsystem>())
 		{
 			Sub->RegisterSource(this);
 		}
@@ -39,7 +39,7 @@ void ULeafInteractionSourceComponent::EndPlay(const EEndPlayReason::Type EndPlay
 {
 	if (UWorld* World = GetWorld())
 	{
-		if (ULeafInteractionFieldSubsystem* Sub = World->GetSubsystem<ULeafInteractionFieldSubsystem>())
+		if (ULeafFieldSubsystem* Sub = World->GetSubsystem<ULeafFieldSubsystem>())
 		{
 			Sub->UnregisterSource(this);
 		}
@@ -54,7 +54,7 @@ void ULeafInteractionSourceComponent::TickComponent(float DeltaTime, ELevelTick 
 
 	const FVector Now = GetSourceWorldLocation();
 
-	// 1) 算这一帧的瞬时速度（位置差分）
+	// 1) 位置差分得到瞬时速度
 	FVector2D InstantVel = FVector2D::ZeroVector;
 	if (bHasPrevLocation && DeltaTime > KINDA_SMALL_NUMBER)
 	{
@@ -64,21 +64,20 @@ void ULeafInteractionSourceComponent::TickComponent(float DeltaTime, ELevelTick 
 	PrevLocation = Now;
 	bHasPrevLocation = true;
 
-	// 2) 不要衰减 → 走老行为，直接吐瞬时速度
+	// 2) 不衰减：直接吐瞬时速度
 	if (VelocityDecayTime <= KINDA_SMALL_NUMBER)
 	{
 		CachedVelocityXY = InstantVel;
 		return;
 	}
 
-	// 3) 指数衰减：每帧 K = exp(-dt/Tau)，与帧率无关
+	// 3) 指数衰减，与帧率无关
 	const float K = FMath::Exp(-DeltaTime / VelocityDecayTime);
-	CachedVelocityXY *= K;
 
 	if (bUsePeakHold)
 	{
-		// 峰值保持：瞬时速度比衰减后的旧值大就立刻刷新
-		// 效果：起步零延迟、停步柔和衰减
+		// 峰值保持：起步零延迟，停步柔和衰减
+		CachedVelocityXY *= K;
 		if (InstantVel.SizeSquared() > CachedVelocityXY.SizeSquared())
 		{
 			CachedVelocityXY = InstantVel;
@@ -86,8 +85,7 @@ void ULeafInteractionSourceComponent::TickComponent(float DeltaTime, ELevelTick 
 	}
 	else
 	{
-		// 纯低通：每帧往瞬时速度靠拢
-		const float A = 1.f - K;
-		CachedVelocityXY = FMath::Lerp(CachedVelocityXY, InstantVel, A);
+		// 纯低通：output = K*prev + (1-K)*input，只乘一次 K
+		CachedVelocityXY = CachedVelocityXY * K + InstantVel * (1.f - K);
 	}
 }

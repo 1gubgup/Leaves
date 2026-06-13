@@ -3,7 +3,7 @@
 	"Version": 1,
 	"VersionName": "1.0",
 	"FriendlyName": "LeafField",
-	"Description": "落叶交互风场插件。提供 LeafInteractionFieldSubsystem 和 LeafInteractionSourceComponent，3步接入即可让落叶 Niagara 随角色移动扰动。",
+	"Description": "可拖入关卡的地面叶子交互 Field 插件。设计师把 BP_LeafField 拖到关卡并由外部逻辑调用 ActivateField()，一次性 Spawn 贴地静止叶子；角色移动时叶子被实时扇起，落下时贴地静止。",
 	"Category": "FX",
 	"CreatedBy": "",
 	"CreatedByURL": "",

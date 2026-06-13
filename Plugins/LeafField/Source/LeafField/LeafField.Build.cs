@@ -14,9 +14,12 @@ public class LeafField : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"Niagara",
-			"RenderCore"
+			"DeveloperSettings"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
+			"RenderCore"
+		});
 	}
 }
