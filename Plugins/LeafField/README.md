@@ -87,7 +87,7 @@ Wind 分组下的参数，**建议先调 WindStrength 确定整体强度，再�
 |------|--------|----------|----------|
 | `Wind Strength` | 1.0 | 整体风力强度。0 = 完全无风，3 = 最大风力 | 先用这个参数确定"叶子能被吹起多猛"，之后其他参数在这个基础上微调 |
 | `Wind Lift` | 0.05 | 水平风转变为上抬力的比例。0 = 叶子只水平飘，1 = 上抬力等于水平风 | 0.05~0.15 比较自然，调太大叶子会飞得很高 |
-| `Wind Response Speed` | 10.0 | 叶子跟上风速的快慢（数值越大跟得越快）| 5 左右有明显拖拽感，10 轻微拖尾，20 几乎即时响应 |
+| `Wind Response Speed` | 5.0 | 叶子跟上风速的快慢（数值越大跟得越快）| 5 左右有明显拖拽感，10 轻微拖尾，20 几乎即时响应 |
 | `Wind Spin Impulse` | 1.0 | 叶子被风"踢起"时翻滚的强度。0 = 不翻滚 | 1.0 比较自然，调大翻滚更剧烈，调到 0.5 左右更轻柔 |
 
 **调 Wind 参数的顺序建议**：
@@ -106,9 +106,9 @@ Wind 分组下的参数，**建议先调 WindStrength 确定整体强度，再�
 
 | 参数 | 默认值 | 效果说明 |
 |------|--------|----------|
-| `Brush Radius UV` | 0.35 | 角色周围的扰动半径（速度场范围 1000cm 时约 350cm）。调大影响范围更广 |
-| `Velocity Strength` | 1.0 | 这个角色扰动叶子的力度倍率。BOSS 等大型单位可以调到 2~3 |
-| `Velocity Decay Time` | 0.25 s | 停步后速度消失的快慢。调小停步更干脆，调大停步后叶子还会惯性飘一会儿 |
+| `Brush Radius World` | 200 cm | 角色周围的扰动半径（世界单位）。调大影响范围更广 |
+| `Velocity Strength` | 1.0 | 角色扰动叶子的力度倍率。大型单位可以调到 2~3 |
+| `Velocity Decay Time` | 0.1 s | 停步后速度消失的快慢。调小停步更干脆，调大停步后叶子还会惯性飘一会儿 |
 
 ---
 
@@ -126,7 +126,7 @@ Wind 分组下的参数，**建议先调 WindStrength 确定整体强度，再�
 | Appearance | `Ground Offset` | 5 cm | 贴地距离，防穿地 |
 | Wind | `Wind Strength` | 1.0 | 整体风力（0~3） |
 | Wind | `Wind Lift` | 0.05 | 上抬力比例（0~1） |
-| Wind | `Wind Response Speed` | 10.0 | 响应速度，越大跟风越快 |
+| Wind | `Wind Response Speed` | 5.0 | 响应速度，越大跟风越快 |
 | Wind | `Wind Spin Impulse` | 1.0 | 被吹起时翻滚强度（0~5） |
 | Advanced | `Height Capture ZOffset` | 2000 cm | 高度相机拍摄高度，需高于场内最高地形 |
 | Advanced | `Ground Blend Height` | 10 cm | 贴地过渡区高度，一般不需要动 |

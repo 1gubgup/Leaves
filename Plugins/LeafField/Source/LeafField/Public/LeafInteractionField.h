@@ -66,7 +66,7 @@ struct FLeafMeshEntry
  *  [LeafField|Wind]  （每个 Field 独立，全局基准见项目设置 → Leaf Field）
  *    WindStrength      – 本 Field 风强度倍率（0~3），默认 1.0
  *    WindLift          – 水平风转上抬力比例（0~1），默认 0.05
- *    WindResponseSpeed – 叶子跟随风场的响应速度（1/s），默认 8.0；越大越灵敏，帧率无关
+ *    WindResponseSpeed – 叶子跟随风场的响应速度（1/s），默认 5.0；越大越灵敏，帧率无关
  *    WindSpinImpulse   – 起飞旋转冲量强度（0~5），默认 0.5
  *
  *  [LeafField|Advanced]
@@ -175,12 +175,12 @@ public:
 	 * 叶子跟随风场速度的响应速度（1/s，即帧率无关的一阶低通截止频率）。
 	 * Alpha = saturate(DeltaTime * WindResponseSpeed)，值越大叶子越灵敏。
 	 *   1  → 约 1 秒内完全响应（拖拽感强）
-	 *   8  → 约 0.12 秒完全响应（推荐默认）
+	 *   5  → 约 0.2 秒完全响应（推荐默认）
 	 *   20 → 约 0.05 秒，几乎硬跟随
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField|Wind",
 		meta = (ClampMin = "0.5", ClampMax = "50.0"))
-	float WindResponseSpeed = 10.0f;
+	float WindResponseSpeed = 5.0f;
 
 	/**
 	 * 叶子被风"踢起"时施加的旋转冲量强度。

@@ -26,7 +26,7 @@ public:
 	/** Splat 笔刷半径（世界单位，cm）。与 VelocityFieldWidth 无关，改 VelocityFieldWidth 后此值不需要手动重算。典型值：100~350 cm */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField",
 		meta = (ClampMin = "1.0", ClampMax = "5000.0", Units = "cm"))
-	float BrushRadiusWorld = 175.f;
+	float BrushRadiusWorld = 200.f;
 
 	/** 速度倍率，调大让叶子被扇得更猛 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField",
@@ -36,7 +36,7 @@ public:
 	/** 速度衰减时间常数（秒）。0 = 瞬时无衰减；0.2~0.3 = 短促拖尾；0.6~1.0 = 风过留香 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField",
 		meta = (ClampMin = "0.0"))
-	float VelocityDecayTime = 0.25f;
+	float VelocityDecayTime = 0.1f;
 
 	/** 峰值保持：起步零延迟、停步柔和衰减（推荐 true）；false = 纯低通（起步也有延迟） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField")

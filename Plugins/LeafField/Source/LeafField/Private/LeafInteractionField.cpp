@@ -234,24 +234,6 @@ void ALeafInteractionField::ActivateField()
 
 	EnsureHeightCaptured();
 
-	// Niagara System 可能还在运行时编译（首次使用时触发），
-	// 编译期间 Activate 的 Spawn Burst 会被跳过，监听编译完成后再重新 Activate。
-	if (LeafSystem->HasOutstandingCompilationRequests())
-	{
-		UE_LOG(LogLeafField, Warning, TEXT("[LeafField] %s: NiagaraSystem still compiling, deferring Activate"), *GetName());
-		LeafSystem->OnSystemCompiled().AddUObject(this, &ALeafInteractionField::OnNiagaraCompiled);
-		// 先把 State 和 Subsystem 注册设好，等编译完回调里再真正 Activate
-		State = ELeafFieldState::Active;
-		if (UWorld* World = GetWorld())
-		{
-			if (ULeafFieldSubsystem* Sub = World->GetSubsystem<ULeafFieldSubsystem>())
-			{
-				Sub->NotifyFieldActivated(this);
-			}
-		}
-		return;
-	}
-
 	// 先推参数（含 LeafCount / FieldExtent），再 Activate，确保 Spawn Burst 读到正确值
 	State = ELeafFieldState::Active;
 	if (UWorld* World = GetWorld())
@@ -266,6 +248,22 @@ void ALeafInteractionField::ActivateField()
 	}
 
 	NiagaraComponent->Activate(true);  // 参数就绪后再触发 Spawn Burst
+
+#if WITH_EDITOR
+	// ⚠️ 编译检查必须放在 Activate「之后」：
+	// 编辑器首次 PIE 时 Niagara System 尚未编译，而编译请求正是由上面的
+	// Activate() 触发的——在它之前 HasOutstandingCompilationRequests() 恒为 false。
+	// 此时若编译仍在进行，本次 Activate 的 Spawn Burst 会被引擎跳过（看不到叶子），
+	// 故注册编译完成回调，在 OnNiagaraCompiled 里重新 Activate 补发 Spawn Burst。
+	// （这正是"先手动打开一次 Niagara 编辑器把结果烤进 DDC 后再运行就正常"的根因。）
+	if (LeafSystem->HasOutstandingCompilationRequests())
+	{
+		UE_LOG(LogLeafField, Warning,
+			TEXT("[LeafField] %s: NiagaraSystem compiling, will re-activate after compile complete"), *GetName());
+		LeafSystem->OnSystemCompiled().RemoveAll(this);  // 防重复注册
+		LeafSystem->OnSystemCompiled().AddUObject(this, &ALeafInteractionField::OnNiagaraCompiled);
+	}
+#endif
 }
 
 void ALeafInteractionField::OnNiagaraCompiled(UNiagaraSystem* InSystem)
