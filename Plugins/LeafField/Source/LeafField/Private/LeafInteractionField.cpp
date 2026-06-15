@@ -30,9 +30,7 @@ namespace LeafFieldNiagara
 	static const FName   N_WindStrength        (TEXT("User.WindStrength"));
 	static const FName   N_WindLift            (TEXT("User.WindLift"));
 	static const FName   N_WindMaxSpeed        (TEXT("User.WindMaxSpeed"));
-	static const FName   N_WindNoiseScale      (TEXT("User.WindNoiseScale"));
-	static const FName   N_WindResponseMin     (TEXT("User.WindResponseMin"));
-	static const FName   N_WindResponseMax     (TEXT("User.WindResponseMax"));
+	static const FName   N_WindResponseSpeed   (TEXT("User.WindResponseSpeed"));
 	static const FName   N_WindSpinImpulse     (TEXT("User.WindSpinImpulse"));
 
 	// Field 推
@@ -339,13 +337,10 @@ void ALeafInteractionField::PushStaticParams()
 
 	// --- Wind（per-Field，每个 Actor 独立）---
 	// WindMaxSpeed 来自全局（速度场 RG8 编码基准，编解码必须匹配，见上方 Sub 分支）
-	NiagaraComponent->SetVariableFloat(LeafFieldNiagara::N_WindStrength,    WindStrength);
-	NiagaraComponent->SetVariableFloat(LeafFieldNiagara::N_WindLift,        WindLift);
-	NiagaraComponent->SetVariableFloat(LeafFieldNiagara::N_WindNoiseScale,  WindNoiseScale);
-	// 保证 Min ≤ Max，防止美术误填后 HLSL 收到反转区间退化为同速响应
-	NiagaraComponent->SetVariableFloat(LeafFieldNiagara::N_WindResponseMin, FMath::Min(WindResponseMin, WindResponseMax));
-	NiagaraComponent->SetVariableFloat(LeafFieldNiagara::N_WindResponseMax, FMath::Max(WindResponseMin, WindResponseMax));
-	NiagaraComponent->SetVariableFloat(LeafFieldNiagara::N_WindSpinImpulse, WindSpinImpulse);
+	NiagaraComponent->SetVariableFloat(LeafFieldNiagara::N_WindStrength,      WindStrength);
+	NiagaraComponent->SetVariableFloat(LeafFieldNiagara::N_WindLift,          WindLift);
+	NiagaraComponent->SetVariableFloat(LeafFieldNiagara::N_WindResponseSpeed, WindResponseSpeed);
+	NiagaraComponent->SetVariableFloat(LeafFieldNiagara::N_WindSpinImpulse,   WindSpinImpulse);
 
 	// --- Field 自身 ---
 	const FVector FieldOrigin = GetActorLocation();

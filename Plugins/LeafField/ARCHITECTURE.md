@@ -1,15 +1,15 @@
 # LeafField 插件架构文档
 
-> 版本：1.0 | 引擎：Unreal Engine 5 | 模块类型：Runtime
+> 版本：1.1 | 引擎：Unreal Engine 5 | 模块类型：Runtime
 
 ---
 
 ## 一、插件概述
 
-LeafField 是一个可拖入关卡的地面落叶交互插件。设计师把 `BP_LeafField`（继承自 `ALeafInteractionField`）拖到关卡，系统自动处理：
+LeafField 是一个可拖入关卡的地面落叶交互插件。将 `ALeafInteractionField`（或其蓝图子类）拖到关卡后，系统自动处理：
 
-- **叶片初始化**：调用 `ActivateField()` 时，通过 Niagara Spawn Burst 生成贴地静止叶片
-- **叶片扰动**：玩家移动时，速度被写入全局速度场 RT，驱动 Niagara 粒子被"扇起"
+- **叶片初始化**：BeginPlay 时默认自动激活（`bAutoActivateOnBeginPlay = true`），通过 Niagara Spawn Burst 生成贴地静止叶片
+- **叶片扰动**：角色移动时速度写入全局速度场 RT，驱动 Niagara 粒子被"扇起"
 - **叶片贴地**：叶片落下时对齐地形法线并静止，起飞时自由翻转
 
 ---
@@ -32,6 +32,7 @@ Plugins/LeafField/
 │       ├── LeafFieldSubsystem.cpp
 │       ├── LeafInteractionField.cpp
 │       └── LeafInteractionSourceComponent.cpp
+├── README.md
 └── ARCHITECTURE.md                 本文档
 ```
 
@@ -47,10 +48,10 @@ Plugins/LeafField/
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `HeightRTSize` | int32 | 256 | 高度图 RT 分辨率（px），改后重启 PIE |
+| `HeightRTSize` | int32 | 256 px | 高度图 RT 分辨率，改后重启 PIE |
 | `VelocityFieldWidth` | float | 500 cm | 速度场覆盖边长（正方形） |
-| `VelocityFieldRTSize` | int32 | 128 | 速度场 RT 分辨率（px），改后重启 PIE |
-| `WindMaxSpeed` | float | 500 cm/s | RG8 编码基准，编解码端必须一致 |
+| `VelocityFieldRTSize` | int32 | 128 px | 速度场 RT 分辨率，改后重启 PIE |
+| `WindMaxSpeed` | float | 1000 cm/s | RG8 编码基准，编解码端必须一致 |
 
 每个 Field 独立的参数（`WindStrength`、`WindLift` 等）不在此处，在 `ALeafInteractionField` 上设置。
 
@@ -63,8 +64,8 @@ Plugins/LeafField/
 #### 职责
 
 1. **注册中心**：维护两张表
-   - `Sources`：挂有 `ULeafInteractionSourceComponent` 的角色列表
-   - `RegisteredFields` / `ActiveFields`：所有 Field / 当前激活的 Field
+   - `Sources`：挂有 `ULeafInteractionSourceComponent` 的角色列表（弱引用）
+   - `ActiveFields`：当前激活的 Field 列表（弱引用）
 
 2. **全局速度场管线**（每帧，仅在 `ActiveFields.Num() > 0` 时运行）：
    ```
@@ -86,8 +87,6 @@ Plugins/LeafField/
 ```cpp
 void RegisterSource(ULeafInteractionSourceComponent*)
 void UnregisterSource(ULeafInteractionSourceComponent*)
-void RegisterField(ALeafInteractionField*)
-void UnregisterField(ALeafInteractionField*)
 void NotifyFieldActivated(ALeafInteractionField*)
 void NotifyFieldDeactivated(ALeafInteractionField*)
 
@@ -122,7 +121,7 @@ Active   ──[DeactivateField()]──▶  Dormant
 - **Dormant**：粒子未激活，Subsystem 不推参数
 - **Active**：Subsystem 每帧调用 `PushDynamicParams`（仅推 `VelocityFieldCenter`）；静态参数在激活时由 `PushStaticParams` 推送一次
 
-两个接口均为幂等：重复调用无副作用。激活/休眠由关卡蓝图、GameMode 或任意外部逻辑调用。
+`bAutoActivateOnBeginPlay = true`（默认）时 BeginPlay 自动调用 `ActivateField()`，无需外部蓝图驱动。两个接口均为幂等，重复调用无副作用。
 
 #### 高度捕获
 
@@ -134,10 +133,11 @@ Active   ──[DeactivateField()]──▶  Dormant
 
 **Asset 类**
 
-| 参数 | 说明 |
-|------|------|
-| `LeafSystem` | Niagara System 资产（必填，指向 N_LeafField） |
-| `LeafMeshes` | 叶片网格列表（最多 4 种，每项 = Mesh + 出现权重）。空槽权重自动锁 0、不参与随机；推送到 `User.LeafMesh0~3` + `User.MeshThreshold0~3` |
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `LeafSystem` | — | Niagara System 资产（必填，指向 N_LeafField） |
+| `bAutoActivateOnBeginPlay` | true | BeginPlay 时自动激活，无需外部调用 ActivateField() |
+| `LeafMeshes[4]` | — | 叶片网格槽位（固定 4 个，每项 = Mesh + 出现权重）。空槽权重自动锁 0、不参与随机；推送到 `User.LeafMesh0~3` + `User.MeshThresholds` |
 
 **Layout 类**
 
@@ -156,19 +156,17 @@ Active   ──[DeactivateField()]──▶  Dormant
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `WindStrength` | 1.0 | 本 Field 风强度倍率（0~5） |
-| `WindLift` | 0.5 | 水平风转上抬力比例（0~1） |
-| `WindNoiseScale` | 0.2 | 方向随机扰动强度（0~1）；0 = 全部叶子方向一致，1 = 最大随机偏散 |
-| `WindResponseMin` | 0.05 s | 最灵敏粒子的响应时间；建议 ≤ WindResponseMax |
-| `WindResponseMax` | 0.1 s | 最迟钝粒子的响应时间；两值相等时所有粒子响应速度一致 |
-| `WindSpinImpulse` | 1.0 | 叶子被风"踢起"时的旋转冲量强度（0~10）；0 = 不翻滚 |
+| `WindStrength` | 1.0 | 本 Field 风强度倍率（0~3） |
+| `WindLift` | 0.1 | 水平风转上抬力比例（0~1） |
+| `WindResponseSpeed` | 8.0 (1/s) | 叶子跟随风场的响应速度，帧率无关；`Alpha = saturate(DeltaTime × WindResponseSpeed)` |
+| `WindSpinImpulse` | 0.5 | 被风踢起时的旋转冲量强度（0~5） |
 
 **Advanced 类**
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `HeightCaptureZOffset` | 2000 cm | 高度相机在 Actor 原点上方的高度 |
-| `GroundBlendHeight` | 18 cm | 贴地过渡区高度（姿态对齐 + 旋转阻尼双重阈值） |
+| `HeightCaptureZOffset` | 2000 cm | 高度相机在 Actor 原点上方的拍摄高度 |
+| `GroundBlendHeight` | 10 cm | 贴地过渡区高度（姿态对齐 + 旋转阻尼双重阈值） |
 
 ---
 
@@ -203,24 +201,26 @@ Active   ──[DeactivateField()]──▶  Dormant
           ▼
 [ULeafFieldSubsystem]  (每帧 Tick)
     │  1. 跟随 Pawn → VelocityFieldCenter
-    │  2. ClearRT(ZeroVelocity)
+    │  2. ClearRT(ZeroVelocity = (0.5, 0.5, 0, 1))
     │  3. SplatPass: 取最快 Source → DrawMaterial → VelocityRT (RG8)
     │  4. 遍历 ActiveFields → PushDynamicParams(Center)
     ▼
 [ALeafInteractionField]
-    │  PushDynamicParams: SetVariable VelocityFieldCenter（每帧，仅此一个）
-    │  PushStaticParams (激活时/RefreshParams): SetVariable → NiagaraComponent
-    │  (含全局静态: VelocityRT / Width / WindMaxSpeed)
-    │  (含本地: HeightRT / HeightCaptureZ / FieldOrigin / Extent / GroundOffset / GroundBlendHeight)
-    │  (含美术: LeafCount / LeafMesh0~3 / MeshThreshold0~3 / WindStrength / WindLift)
-    │  (含风力: WindNoiseScale / WindResponseMin / WindResponseMax / WindSpinImpulse)
+    │  PushDynamicParams : SetVariable VelocityFieldCenter（每帧，仅此一个）
+    │  PushStaticParams  : SetVariable → NiagaraComponent（激活时 / RefreshParams 时）
+    │    ├── 全局静态  : VelocityRT / VelocityFieldWidth / WindMaxSpeed
+    │    ├── Wind      : WindStrength / WindLift / WindResponseSpeed / WindSpinImpulse
+    │    ├── Field 自身: HeightRT / HeightCaptureZ / FieldOrigin / FieldExtent
+    │    │               GroundOffset / GroundBlendHeight
+    │    └── 美术      : LeafCount / LeafMesh0~3 / MeshThresholds
     ▼
 [Niagara System: N_LeafField]
     ├── Init Module (Spawn Burst)
     │       世界坐标采样 HeightRT → 贴地初始位置
     │       随机 Yaw → 平躺初始姿态
+    │       RandMesh + MeshThresholds → MeshIndex
     └── Update Module (每帧)
-            ├── 速度场模块（VelocityRT → 风速 → lerp 驱动粒子速度）
+            ├── 速度场模块（VelocityRT → 风速 → 驱动粒子速度）
             └── 贴地/碰撞模块（HeightRT → groundZ → 姿态/位置/旋转修正）
 ```
 
@@ -241,34 +241,34 @@ Active   ──[DeactivateField()]──▶  Dormant
 | `FieldOrigin` | float3 | User.FieldOrigin（Actor 世界位置） |
 | `FieldExtent` | float3 | User.FieldExtent（半尺寸） |
 | `GroundOffset` | float | User.GroundOffset |
-| `RandMesh` | float [0,1] | Niagara Random Float（多 Mesh 选择用，Spawn Only） |
-| `MeshThreshold0~3` | float | User.MeshThreshold0~3（累积权重阈值，C++ 按 LeafMeshes 权重计算） |
+| `RandMesh` | float [0,1] | Niagara Random Float |
+| `MeshThresholds` | float3 | User.MeshThresholds（槽 0/1/2 的归一化累积阈值） |
 
 **逻辑**
 
 ```hlsl
 // 1. 随机世界坐标 XY（在 FieldExtent 范围内）
-float worldX = (FieldOrigin.x - FieldExtent.x) + RandX * (FieldExtent.x * 2.0f);
-float worldY = (FieldOrigin.y - FieldExtent.y) + RandY * (FieldExtent.y * 2.0f);
+float worldX = (FieldOrigin.x - FieldExtent.x) + RandX * (FieldExtent.x * 2.0);
+float worldY = (FieldOrigin.y - FieldExtent.y) + RandY * (FieldExtent.y * 2.0);
 
 // 2. 采样高度图得到贴地 Z（UV 轴向：U=worldY, V=inv worldX）
-float2 uv = float2(RandY, 1.0f - RandX);
+float2 uv = float2(RandY, 1.0 - RandX);
 float worldZ = HeightCaptureZ - HeightRT.SampleTexture2D(uv).r + GroundOffset;
 
-// 3. 随机 Yaw，平躺姿态（绕 Z 轴旋转的四元数）
-float yaw = RandYaw * 6.28318f;
+// 3. 随机 Yaw，平躺姿态
+float yaw = RandYaw * 6.28318;
 OutOrientation = float4(0, 0, sin(yaw/2), cos(yaw/2));
 
-// 4. 多 Mesh 选择：RandMesh 落在哪个累积阈值区间就用对应 Mesh slot
-//    阈值由 C++ 按各 Mesh 权重归一化得出（如 [0.5, 0.8, 1.0, 1.0]）
+// 4. 多 Mesh 选择：RandMesh 落在哪个累积阈值区间就选对应槽位
+//    MeshThresholds.xyz = 槽 0/1/2 累积上限，槽 3 为隐式兜底
 int meshIdx = 3;
-if      (RandMesh < MeshThreshold0) meshIdx = 0;
-else if (RandMesh < MeshThreshold1) meshIdx = 1;
-else if (RandMesh < MeshThreshold2) meshIdx = 2;
-OutMeshIndex = meshIdx;   // → Particles.MeshIndex（绑定到 Mesh Renderer 的 Mesh Index Binding）
+if      (RandMesh < MeshThresholds.x) meshIdx = 0;
+else if (RandMesh < MeshThresholds.y) meshIdx = 1;
+else if (RandMesh < MeshThresholds.z) meshIdx = 2;
+OutMeshIndex = meshIdx;
 ```
 
-> **多 Mesh 渲染**：Mesh Renderer 配 4 个 slot 分别绑 `User.LeafMesh0~3`，`Mesh Index Binding` 设为 `Particles.MeshIndex`。C++ 端空槽用上一个有效 Mesh 占位（防 null），但其权重为 0、阈值不增长，永不会被选中。开销仅是按 MeshIndex 分批的 draw call（最多 4 个 instanced 批次），与单 Mesh 同量级。
+> **多 Mesh 渲染**：Mesh Renderer 配 4 个 slot 分别绑 `User.LeafMesh0~3`，`Mesh Index Binding` 设为 `Particles.MeshIndex`。C++ 端将空槽用上一个有效 Mesh 占位（防 null），但其权重为 0、阈值不增长，永不会被选中。
 
 ---
 
@@ -284,32 +284,58 @@ OutMeshIndex = meshIdx;   // → Particles.MeshIndex（绑定到 Mesh Renderer �
 | `WindMaxSpeed` | float | User.WindMaxSpeed（解码基准） |
 | `WindStrength` | float | User.WindStrength（本 Field 倍率） |
 | `WindLift` | float | User.WindLift（水平转上抬比例） |
-| `WindNoiseScale` | float | User.WindNoiseScale（方向随机扰动强度 0~1） |
-| `WindResponseMin` | float | User.WindResponseMin（最快响应时间，秒） |
-| `WindResponseMax` | float | User.WindResponseMax（最慢响应时间，秒） |
-| `WindSpinImpulse` | float | User.WindSpinImpulse（起飞旋转冲量强度） |
-| `UniqueID` | uint | 粒子唯一 ID（用于 hash 随机） |
+| `WindResponseSpeed` | float | User.WindResponseSpeed（响应速度 1/s） |
+| `WindSpinImpulse` | float | User.WindSpinImpulse（旋转冲量强度） |
+| `UniqueID` | uint | 粒子唯一 ID（用于 hash 随机旋转轴） |
 | `DeltaTime` | float | 帧时间 |
 
 **逻辑流程**
 
-```
-1. 世界坐标 → 速度场 UV
-2. 范围外：保持原速度；范围内继续
-3. 采样 VelocityRT，解码：NormVel = (rg - 0.5) × 2
-4. 计算目标风速：windVel = normalize(normVel) × WindMaxSpeed × WindStrength
-                          + Z 分量：windMag × WindLift
-5. 整数 hash（基于 UniqueID）生成 per-particle 随机数
-   - R1, R2：方向噪声扰动（± windMag × WindNoiseScale）
-   - R3：个体响应时间（WindResponseMin ~ WindResponseMax，lerp Alpha）
-6. OutVelocity = lerp(InVelocity × exp(-Drag×DT), windVel, Alpha)
-7. 速度增量触发旋转冲量：
-   speedDelta = max(0, |OutVelocity| - |InVelocity|)
-   kickRatio  = smoothstep(0, 200 cm/s, speedDelta)
-   OutRotationalVelocity = RotationalVelocity + float3(R1, R2, R1+R2) × WindSpinImpulse × kickRatio
+```hlsl
+// 1. 世界坐标 → 速度场 UV
+float HalfW = VelocityFieldWidth * 0.5;
+float2 velUV = float2(
+    (Position.x - (VelocityFieldCenter.x - HalfW)) / VelocityFieldWidth,
+    (Position.y - (VelocityFieldCenter.y - HalfW)) / VelocityFieldWidth);
+
+// 场外直接透传，不修改速度
+if (!all(velUV >= 0.0 && velUV <= 1.0)) return;
+
+// 2. 采样并解码速度场：NormVel ∈ [-1, 1]
+float4 velSample;
+VelocityRT.SampleTexture2D(velUV, 0.0, velSample);
+float2 normVel = (velSample.rg - 0.5) * 2.0;
+float  windMag = length(normVel) * WindMaxSpeed * WindStrength;
+
+// 3. 方向钳位到单位圆
+float normLenSq = dot(normVel, normVel);
+if (normLenSq > 1.0) normVel *= rsqrt(normLenSq);
+
+// 4. 目标风速（XY + Z 上抬）
+float3 windVel = float3(normVel * WindMaxSpeed * WindStrength, windMag * WindLift);
+
+// 5. 帧率无关响应（一阶低通）
+float Alpha    = saturate(DeltaTime * WindResponseSpeed);
+OutVelocity.xy = lerp(InVelocity.xy, windVel.xy, Alpha);
+OutVelocity.z  = InVelocity.z + windVel.z;
+
+// 6. per-particle hash → 随机旋转轴
+uint h = uint(UniqueID);
+// ... （整数 hash 展开）...
+float R1 = float(h & 0xFFFF) / 65535.0 * 2.0 - 1.0;
+float R2 = ...;
+
+// 7. 速度增量驱动旋转冲量
+float speedDelta = max(0.0, length(OutVelocity) - length(InVelocity));
+OutRotationalVelocity = RotationalVelocity
+    + float3(R1, R2, 0) * WindSpinImpulse * smoothstep(0.0, 100.0, speedDelta);
 ```
 
-**关键设计点**：用整数 hash 替代 sin 随机，分布更均匀、GPU 更友好。
+**关键设计点**
+
+- `WindResponseSpeed` 是帧率无关的截止频率：`Alpha = saturate(DeltaTime × Speed)`，值越大响应越快（8 ≈ 0.12s 完全跟上）
+- 旋转轴用 per-particle hash 随机化，使每片叶子翻滚方向不同，无随机方向噪声（已移除）
+- 场外叶片速度完全透传，不受风场影响
 
 ---
 
@@ -324,7 +350,7 @@ OutMeshIndex = meshIdx;   // → Particles.MeshIndex（绑定到 Mesh Renderer �
 | `FieldOrigin` | float3 | User.FieldOrigin |
 | `FieldExtent` | float3 | User.FieldExtent |
 | `GroundOffset` | float | User.GroundOffset |
-| `GroundBlendHeight` | float | User.GroundBlendHeight（姿态对齐 + 旋转阻尼阈值） |
+| `GroundBlendHeight` | float | User.GroundBlendHeight |
 
 **HeightRT UV 轴向约定**
 
@@ -337,32 +363,30 @@ V = ((FieldOrigin.x + FieldExtent.x) - Position.x) / (FieldExtent.x * 2)
 **逻辑流程**
 
 ```
-groundZ = HeightCaptureZ - HeightRT.Sample(uv).r + GroundOffset
+groundZ    = HeightCaptureZ - HeightRT.Sample(uv).r + GroundOffset
 HeightAbove = Position.z - groundZ
 
-─── 速度向下权重（核心）───────────────────────────────────────────
+─── 速度向下权重（核心）────────────────────────────────────────────
 downWeight = smoothstep(0, FallBlendSpeed=30cm/s, -InVelocity.z)
-  向上飞=0，水平≈0，正常下落≥1
+  向上飞=0，水平≈0，正常下落→1
 
 ─── 姿态对齐权重 t ─────────────────────────────────────────────
 distWeight = 1 - smoothstep(0, GroundBlendHeight, HeightAbove)
 t = distWeight × downWeight
   （起飞时 downWeight=0 → t=0 → 完全不介入）
 
-─── 地形法线（仅 t>0.01 才采样）───────────────────────────────
+─── 地形法线（仅 t>0.01 才采样）──────────────────────────────────
   有限差分（eps=2/256），计算 tangentX/tangentY → cross → terrainNormal
   双面判断：选与当前朝上轴更近的一侧
   swing 四元数：curUp → targetUp，保留 Yaw
 
 ─── 旋转阻尼 ───────────────────────────────────────────────────
-spinDistDamp = 1 - smoothstep(0, GroundBlendHeight, HeightAbove)
-spinDamp = 1 - spinDistDamp × downWeight
-  （向上飞：spinDamp=1，自由翻飞；向下+近地：spinDamp→0，停转）
+spinDamp = 1 - smoothstep(0, GroundBlendHeight, HeightAbove) × downWeight
+  （向上飞：spinDamp=1 自由翻飞；向下+近地：spinDamp→0 停转）
 
-─── 输出 ────────────────────────────────────────────────────────
-OutPosition    = (x, y, max(z, groundZ))         地面 clamp
+─── 输出 ───────────────────────────────────────────────────────
+OutPosition    = (x, y, max(z, groundZ))
 OutOrientation = nlerp(InOrientation, TargetQuat, t)
-OutVelocity    = InVelocity（速度由速度场模块管理）
 OutRotVelocity = RotationalVelocity × spinDamp
 
 ─── 落地完全静止 ────────────────────────────────────────────────
@@ -375,7 +399,7 @@ if (Position.z <= groundZ && InVelocity.z < 0):
 | 参数 | 来源 | 含义 |
 |------|------|------|
 | `FallBlendSpeed` | 硬编码 30 cm/s | 向下速度超过此值才完全启用贴地逻辑 |
-| `GroundBlendHeight` | User.GroundBlendHeight | 距地多高开始姿态对齐 + 旋转阻尼（默认 18 cm） |
+| `GroundBlendHeight` | User.GroundBlendHeight | 距地多高开始姿态对齐 + 旋转阻尼（默认 10 cm） |
 
 ---
 
@@ -405,9 +429,24 @@ if (ActiveFields.Num() == 0) return;   // Subsystem::Tick 提前退出
 
 `downWeight` 确保叶片被风吹起时完全自由翻转，只有真正在下落阶段才开始对齐地形法线，避免起飞时姿态被强制拉回地面产生视觉僵硬感。
 
-### 6.5 Niagara 编译延迟处理
+### 6.5 WindResponseSpeed：帧率无关的一阶低通
+
+旧版用 `WindResponseMin/Max` 随机响应时间，新版统一为单一的 `WindResponseSpeed`（1/s）。
+`Alpha = saturate(DeltaTime * WindResponseSpeed)` 是标准的帧率无关离散化，响应速度直观可调：
+
+| WindResponseSpeed | 约完全响应时间 |
+|---|---|
+| 1 | ~1 s（拖拽感强）|
+| 8 | ~0.12 s（推荐默认）|
+| 20 | ~0.05 s（几乎硬跟随）|
+
+### 6.6 Niagara 编译延迟处理
 
 首次使用 Niagara System 时可能还在异步编译（shader），`ActivateField` 检测到 `HasOutstandingCompilationRequests()` 时先注册 Subsystem，等 `OnSystemCompiled` 回调后再真正 `Activate(true)`，确保 Spawn Burst 读到正确参数。
+
+### 6.7 MeshThresholds 打包为 Vector3
+
+多 Mesh 权重阈值（槽 0/1/2 的归一化累积上限）打包进单个 `User.MeshThresholds`（FVector），槽 3 为隐式兜底。减少 Niagara 参数数量，避免参数名对不齐导致两端读到默认 0。
 
 ---
 
@@ -416,13 +455,13 @@ if (ActiveFields.Num() == 0) return;   // Subsystem::Tick 提前退出
 ### 添加新 Field 参数
 
 1. 在 `ALeafInteractionField.h` 添加 `UPROPERTY`
-2. 在 `LeafInteractionField.cpp` 的 `LeafFieldNiagara` 命名空间添加常量名
+2. 在 `LeafInteractionField.cpp` 的 `LeafFieldNiagara` 命名空间添加 `FName` 常量
 3. 在 `PushStaticParams` 中调用 `SetVariableFloat/Vec3/...`（若参数每帧变化则改在 `PushDynamicParams`）
 4. 在 Niagara System 中添加对应 `User.XXX` 参数并在 HLSL 中使用
 
 ### 支持多 Source 叠加速度
 
-当前 `SplatPass` 取最大速度，升级路径：Ping-Pong 双 RT 多次 DrawMaterial 叠加（已在代码注释中标注 `// 升级路径`）。
+当前 `SplatPass` 取最大速度，升级路径：Ping-Pong 双 RT 多次 DrawMaterial 叠加（代码中已标注 `// 升级路径`）。
 
 ### 运行时动态叶片密度
 

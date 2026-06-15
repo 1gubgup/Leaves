@@ -64,12 +64,10 @@ struct FLeafMeshEntry
  *    GroundOffset    – 叶片贴地安全距离 cm → User.GroundOffset
  *
  *  [LeafField|Wind]  （每个 Field 独立，全局基准见项目设置 → Leaf Field）
- *    WindStrength    – 本 Field 风强度倍率（0~3），默认 1.0
- *    WindLift        – 水平风转上抬力比例（0~1），默认 0.1
- *    WindNoiseScale  – 方向随机扰动强度（0~1），默认 0.2
- *    WindResponseMin – 叶子响应风力的最快时间（秒），默认 0.05；建议 ≤ WindResponseMax
- *    WindResponseMax – 叶子响应风力的最慢时间（秒），默认 0.1；建议 ≥ WindResponseMin
- *    WindSpinImpulse – 起飞旋转冲量强度（0~5），默认 0.5
+ *    WindStrength      – 本 Field 风强度倍率（0~3），默认 1.0
+ *    WindLift          – 水平风转上抬力比例（0~1），默认 0.05
+ *    WindResponseSpeed – 叶子跟随风场的响应速度（1/s），默认 8.0；越大越灵敏，帧率无关
+ *    WindSpinImpulse   – 起飞旋转冲量强度（0~5），默认 0.5
  *
  *  [LeafField|Advanced]
  *    HeightCaptureZOffset – 高度相机在 Actor 原点上方的拍摄高度 cm
@@ -174,32 +172,15 @@ public:
 	float WindLift = 0.1f;
 
 	/**
-	 * 风力方向随机扰动强度（0~1）。
-	 * 0 = 所有叶子朝完全相同的风向运动；1 = 最大随机偏散，叶子飘动更自然凌乱。
-	 * 对应 Niagara HLSL 里的 NoiseScale 系数。
+	 * 叶子跟随风场速度的响应速度（1/s，即帧率无关的一阶低通截止频率）。
+	 * Alpha = saturate(DeltaTime * WindResponseSpeed)，值越大叶子越灵敏。
+	 *   1  → 约 1 秒内完全响应（拖拽感强）
+	 *   8  → 约 0.12 秒完全响应（推荐默认）
+	 *   20 → 约 0.05 秒，几乎硬跟随
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField|Wind",
-		meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float WindNoiseScale = 0.2f;
-
-	/**
-	 * 叶子响应风力的最快时间（秒）。
-	 * 实际响应时间在 [WindResponseMin, WindResponseMax] 内随粒子随机分布。
-	 * 值越小，最灵敏的叶子反应越即时。建议 ≤ WindResponseMax。
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField|Wind",
-		meta = (ClampMin = "0.01", ClampMax = "0.5", ForceUnits = "s"))
-	float WindResponseMin = 0.05f;
-
-	/**
-	 * 叶子响应风力的最慢时间（秒）。
-	 * 值越大，最迟钝的叶子延迟感越明显，整体飘动更有层次。
-	 * 建议 ≥ WindResponseMin；两值相等时所有叶子响应速度相同（无个体差异）。
-	 * 若意外调成 Min > Max，HLSL 响应区间为负，所有叶子退化为以 Min 速度响应。
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField|Wind",
-		meta = (ClampMin = "0.01", ClampMax = "0.5", ForceUnits = "s"))
-	float WindResponseMax = 0.1f;
+		meta = (ClampMin = "0.5", ClampMax = "50.0"))
+	float WindResponseSpeed = 8.0f;
 
 	/**
 	 * 叶子被风"踢起"时施加的旋转冲量强度。
