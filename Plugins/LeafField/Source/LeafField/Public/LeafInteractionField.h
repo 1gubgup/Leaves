@@ -169,7 +169,7 @@ public:
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField|Wind",
 		meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float WindLift = 0.1f;
+	float WindLift = 0.05f;
 
 	/**
 	 * 叶子跟随风场速度的响应速度（1/s，即帧率无关的一阶低通截止频率）。
@@ -180,7 +180,7 @@ public:
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField|Wind",
 		meta = (ClampMin = "0.5", ClampMax = "50.0"))
-	float WindResponseSpeed = 8.0f;
+	float WindResponseSpeed = 10.0f;
 
 	/**
 	 * 叶子被风"踢起"时施加的旋转冲量强度。
@@ -190,7 +190,7 @@ public:
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField|Wind",
 		meta = (ClampMin = "0.0", ClampMax = "5.0"))
-	float WindSpinImpulse = 0.5f;
+	float WindSpinImpulse = 1.0f;
 
 	// ============================================================
 	// 技术参数（一般保持默认，需要时才调整）

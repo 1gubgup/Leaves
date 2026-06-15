@@ -181,16 +181,13 @@ FVector2D ULeafFieldSubsystem::WorldToVelocityUV(const FVector& WorldPos) const
 
 void ULeafFieldSubsystem::SplatPass()
 {
-	// 取最大速度策略：N 个 Source 选最快者写入。
-	// 升级路径（暂未实现）：Ping-Pong 双 RT 叠加多 Source。
+	// 取速度幅度最大的那个 Source 做一次 Splat
 	if (!SplatMID || !VelocityRT || Sources.Num() == 0) return;
 
 	const float InvVelScale = (WindMaxSpeed > KINDA_SMALL_NUMBER) ? (1.f / WindMaxSpeed) : 1.f;
 
-	FVector2D WinUV(0.f, 0.f);
-	FVector2D WinNormVel(0.f, 0.f);
-	float WinRadius = 0.f;
-	float WinMagSq = -1.f;
+	ULeafInteractionSourceComponent* BestSrc = nullptr;
+	float BestMag = 0.f;
 
 	for (auto It = Sources.CreateIterator(); It; ++It)
 	{
@@ -198,27 +195,29 @@ void ULeafFieldSubsystem::SplatPass()
 		if (!Src) { It.RemoveCurrent(); continue; }
 
 		const FVector2D UV = WorldToVelocityUV(Src->GetSourceWorldLocation());
-		if (UV.X < -0.1f || UV.X > 1.1f || UV.Y < -0.1f || UV.Y > 1.1f) continue;
+		if (UV.X < 0.f || UV.X > 1.f || UV.Y < 0.f || UV.Y > 1.f) continue;
 
-		const FVector2D NormVel = Src->GetVelocityXY() * InvVelScale;
-		const float MagSq = NormVel.SizeSquared();
-
-		if (MagSq > WinMagSq)
+		const float Mag = Src->GetVelocityXY().Size();
+		if (Mag > BestMag)
 		{
-			WinMagSq = MagSq;
-			WinUV = UV;
-			WinNormVel = NormVel;
-			WinRadius = Src->BrushRadiusUV;
+			BestMag = Mag;
+			BestSrc = Src;
 		}
 	}
 
-	if (WinMagSq < 0.f) return;
+	if (!BestSrc || BestMag < KINDA_SMALL_NUMBER) return;
+
+	const FVector2D SplatUV = WorldToVelocityUV(BestSrc->GetSourceWorldLocation());
+	const FVector2D NormVel = BestSrc->GetVelocityXY() * InvVelScale;
+	const float     RadiusUV = (VelocityFieldWidth > KINDA_SMALL_NUMBER)
+		? (BestSrc->BrushRadiusWorld / VelocityFieldWidth)
+		: 0.f;
 
 	SplatMID->SetVectorParameterValue(LeafFieldSplatParam::P_CenterUV,
-		FLinearColor(WinUV.X, WinUV.Y, 0.f, 0.f));
-	SplatMID->SetScalarParameterValue(LeafFieldSplatParam::P_RadiusUV, WinRadius);
+		FLinearColor(SplatUV.X, SplatUV.Y, 0.f, 0.f));
+	SplatMID->SetScalarParameterValue(LeafFieldSplatParam::P_RadiusUV, RadiusUV);
 	SplatMID->SetVectorParameterValue(LeafFieldSplatParam::P_Velocity,
-		FLinearColor(WinNormVel.X, WinNormVel.Y, 0.f, 1.f));
+		FLinearColor(NormVel.X, NormVel.Y, 0.f, 1.f));
 
 	UKismetRenderingLibrary::DrawMaterialToRenderTarget(this, VelocityRT, SplatMID);
 }

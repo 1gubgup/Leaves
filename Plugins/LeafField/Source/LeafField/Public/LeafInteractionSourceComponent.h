@@ -23,10 +23,10 @@ class LEAFFIELD_API ULeafInteractionSourceComponent : public UActorComponent
 public:
 	ULeafInteractionSourceComponent();
 
-	/** Splat 笔刷半径（UV 空间，0~1）。在 VelocityFieldWidth=500cm 时：0.2≈100cm、0.35≈175cm 半径 */
+	/** Splat 笔刷半径（世界单位，cm）。与 VelocityFieldWidth 无关，改 VelocityFieldWidth 后此值不需要手动重算。典型值：100~350 cm */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField",
-		meta = (ClampMin = "0.01", ClampMax = "0.8"))
-	float BrushRadiusUV = 0.35f;
+		meta = (ClampMin = "1.0", ClampMax = "5000.0", Units = "cm"))
+	float BrushRadiusWorld = 175.f;
 
 	/** 速度倍率，调大让叶子被扇得更猛 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField",

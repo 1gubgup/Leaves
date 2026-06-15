@@ -54,7 +54,7 @@ public:
 	UPROPERTY(EditAnywhere, config, Category = "VelocityField",
 		meta = (ClampMin = "100.0", ClampMax = "2000.0", ForceUnits = "cm",
 		        ToolTip = "速度场覆盖范围（cm，正方形边长）。改动后需重启 PIE 生效（Subsystem 初始化时读取一次）。"))
-	float VelocityFieldWidth = 500.f;
+	float VelocityFieldWidth = 1000.f;
 
 	/**
 	 * 速度场 RT 分辨率（像素，正方形）。
@@ -64,7 +64,7 @@ public:
 	UPROPERTY(EditAnywhere, config, Category = "VelocityField",
 		meta = (ClampMin = "64", ClampMax = "512",
 		        ToolTip = "速度场 RT 分辨率（像素）。改动后需重启 PIE 生效。"))
-	int32 VelocityFieldRTSize = 128;
+	int32 VelocityFieldRTSize = 256;
 
 	// ============================================================
 	// 风力编码基准（Wind）
