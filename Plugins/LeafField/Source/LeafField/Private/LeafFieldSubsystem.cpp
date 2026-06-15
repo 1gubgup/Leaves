@@ -3,7 +3,6 @@
 #include "LeafFieldSubsystem.h"
 #include "LeafFieldSettings.h"
 #include "LeafInteractionSourceComponent.h"
-#include "LeafInteractionField.h"
 
 #include "Engine/World.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -13,6 +12,8 @@
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
+
+#include "NiagaraParameterCollection.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogLeafField, Log, All);
 
@@ -33,6 +34,8 @@ const FString ULeafFieldSubsystem::VelocityRTAssetPath =
 	TEXT("/LeafField/LeafField/RT_VelocityField.RT_VelocityField");
 const FString ULeafFieldSubsystem::SplatMaterialPath =
 	TEXT("/LeafField/LeafField/M_FluidSplat.M_FluidSplat");
+const FString ULeafFieldSubsystem::NPCAssetPath =
+	TEXT("/LeafField/LeafField/NPC_LeafField.NPC_LeafField");
 
 // ============================================================
 // 生命周期
@@ -78,15 +81,39 @@ void ULeafFieldSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	{
 		UE_LOG(LogLeafField, Warning, TEXT("[LeafField] Splat material not found: %s"), *SplatMaterialPath);
 	}
+
+	// ── NPC：供 WindInteraction 模块随插随用 ────────────────────
+	// NPC_LeafField 资产不存在时静默跳过，Splat 管线仍正常运行。
+	if (UNiagaraParameterCollection* NPC = LoadObject<UNiagaraParameterCollection>(nullptr, *NPCAssetPath))
+	{
+		NPCInstance = GetWorld()->GetNiagaraParameterCollectionInstance(NPC);
+		if (NPCInstance)
+		{
+			NPCInstance->SetFloatParameter(FName("VelocityFieldWidth"), VelocityFieldWidth);
+			NPCInstance->SetFloatParameter(FName("WindMaxSpeed"),        WindMaxSpeed);
+			if (VelocityRT)
+			{
+				NPCInstance->SetTextureParameter(FName("VelocityRT"), VelocityRT);
+			}
+			UE_LOG(LogLeafField, Log, TEXT("[LeafField] NPC_LeafField initialized (Width=%.0f MaxSpeed=%.0f)"),
+				VelocityFieldWidth, WindMaxSpeed);
+		}
+	}
+	else
+	{
+		UE_LOG(LogLeafField, Log,
+			TEXT("[LeafField] NPC_LeafField not found at %s, create it to enable WindInteraction module support"),
+			*NPCAssetPath);
+	}
 }
 
 void ULeafFieldSubsystem::Deinitialize()
 {
 	Sources.Reset();
-	ActiveFields.Reset();
 	SplatMaterial = nullptr;
 	SplatMID = nullptr;
 	VelocityRT = nullptr;
+	NPCInstance = nullptr;
 
 	Super::Deinitialize();
 }
@@ -114,20 +141,6 @@ void ULeafFieldSubsystem::UnregisterSource(ULeafInteractionSourceComponent* Sour
 	});
 }
 
-void ULeafFieldSubsystem::NotifyFieldActivated(ALeafInteractionField* Field)
-{
-	if (Field) ActiveFields.AddUnique(Field);
-}
-
-void ULeafFieldSubsystem::NotifyFieldDeactivated(ALeafInteractionField* Field)
-{
-	if (!Field) return;
-	ActiveFields.RemoveAll([Field](const TWeakObjectPtr<ALeafInteractionField>& W)
-	{
-		return !W.IsValid() || W.Get() == Field;
-	});
-}
-
 // ============================================================
 // Tick
 // ============================================================
@@ -139,9 +152,6 @@ void ULeafFieldSubsystem::Tick(float DeltaTime)
 	UWorld* World = GetWorld();
 	if (!World) return;
 
-	// 没有任何激活的 Field → 跳过整个管线，零开销
-	if (ActiveFields.Num() == 0) return;
-
 	// 跟随本地 Pawn XY
 	if (APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0))
 	{
@@ -151,19 +161,20 @@ void ULeafFieldSubsystem::Tick(float DeltaTime)
 		}
 	}
 
-	// 速度场管线：Clear → Splat
-	UKismetRenderingLibrary::ClearRenderTarget2D(this, VelocityRT, LeafFieldSplatParam::ZeroVelocityColor);
-	if (SplatMID)
+	// 速度场管线：Clear → Splat（无 Source 时跳过，RT 保持零速状态即可）
+	if (Sources.Num() > 0)
 	{
-		SplatPass();
+		UKismetRenderingLibrary::ClearRenderTarget2D(this, VelocityRT, LeafFieldSplatParam::ZeroVelocityColor);
+		if (SplatMID)
+		{
+			SplatPass();
+		}
 	}
 
-	// 推参数给所有激活的 Field
-	for (auto It = ActiveFields.CreateIterator(); It; ++It)
+	// NPC 每帧写入动态参数（供 WindInteraction 模块直接读取）
+	if (NPCInstance)
 	{
-		ALeafInteractionField* Field = It->Get();
-		if (!Field) { It.RemoveCurrent(); continue; }
-		Field->PushDynamicParams(VelocityFieldCenter);
+		NPCInstance->SetVectorParameter(FName("VelocityFieldCenter"), VelocityFieldCenter);
 	}
 }
 
@@ -181,7 +192,6 @@ FVector2D ULeafFieldSubsystem::WorldToVelocityUV(const FVector& WorldPos) const
 
 void ULeafFieldSubsystem::SplatPass()
 {
-	// 取速度幅度最大的那个 Source 做一次 Splat
 	if (!SplatMID || !VelocityRT || Sources.Num() == 0) return;
 
 	const float InvVelScale = (WindMaxSpeed > KINDA_SMALL_NUMBER) ? (1.f / WindMaxSpeed) : 1.f;

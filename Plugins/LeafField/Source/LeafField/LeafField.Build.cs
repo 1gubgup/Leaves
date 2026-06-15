@@ -14,6 +14,7 @@ public class LeafField : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"Niagara",
+			"NiagaraCore",
 			"DeveloperSettings"
 		});
 

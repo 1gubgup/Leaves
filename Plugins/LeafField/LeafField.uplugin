@@ -3,7 +3,7 @@
 	"Version": 1,
 	"VersionName": "1.0",
 	"FriendlyName": "LeafField",
-	"Description": "可拖入关卡的地面叶子交互 Field 插件。设计师把 BP_LeafField 拖到关卡并由外部逻辑调用 ActivateField()，一次性 Spawn 贴地静止叶子；角色移动时叶子被实时扇起，落下时贴地静止。",
+	"Description": "速度场驱动插件，提供 WindInteraction Niagara 模块。角色挂载 LeafInteractionSource 组件后，速度实时写入全局速度场 RT 并通过 NPC_LeafField 广播，任意 Niagara System 挂载 WindInteraction 模块即可让粒子感知风速。",
 	"Category": "FX",
 	"CreatedBy": "",
 	"CreatedByURL": "",

@@ -10,13 +10,13 @@
  * LeafField 全局项目设置。
  * 出现在：编辑器 → 项目设置 → 插件 → Leaf Field
  *
- * 这里只放「必须全局一致」或「所有 Field 共享同一份 RT 资源」的参数：
+ * 这里只放「必须全局一致」的速度场参数：
  *
- *   VelocityFieldWidth   — 速度场覆盖尺寸（cm）
+ *   VelocityFieldWidth   — 速度场覆盖尺寸（cm），同时写入 NPC_LeafField
  *   VelocityFieldRTSize  — 速度场 RT 分辨率（px），改后需重启 PIE
- *   WindMaxSpeed         — 速度场编码基准（cm/s），编解码必须全局匹配
+ *   WindMaxSpeed         — 速度场编码基准（cm/s），编解码必须全局匹配，同时写入 NPC_LeafField
  *
- * 每个 Field 独立的参数（WindStrength / WindLift 等）请在 ALeafInteractionField 上设置。
+ * WindInteraction 模块内部可调参数（WindStrength / WindLift 等）直接在 Niagara 编辑器中调整。
  */
 UCLASS(config = Game, defaultconfig, meta = (DisplayName = "Leaf Field"))
 class LEAFFIELD_API ULeafFieldSettings : public UDeveloperSettings
@@ -28,32 +28,18 @@ public:
 	virtual FName GetCategoryName() const override { return TEXT("Plugins"); }
 
 	// ============================================================
-	// 高度图（HeightField）
-	// ============================================================
-
-	/**
-	 * 高度图 RT 分辨率（像素，正方形）。
-	 * 决定贴地法线的采样精度：越大贴地越精细，但每个 Field 多一张 RT 内存。
-	 * 典型值：128（低精度省内存）/ 256（默认）/ 512（高精度大地形）。
-	 * 改动后需重启 PIE 生效（RT 在 BeginPlay 时创建）。
-	 */
-	UPROPERTY(EditAnywhere, config, Category = "HeightField",
-		meta = (ClampMin = "64", ClampMax = "512",
-		        ToolTip = "高度图 RT 分辨率（像素）。改动后需重启 PIE 生效。"))
-	int32 HeightRTSize = 256;
-
-	// ============================================================
 	// 速度场（VelocityField）
 	// ============================================================
 
 	/**
 	 * 速度场覆盖范围（cm，正方形边长）。
-	 * 角色在此范围内行走才会扰动叶子；超出范围则速度写不进 RT。
+	 * 角色在此范围内行走才会扰动粒子；超出范围则速度写不进 RT。
 	 * 典型值：500（5m）~ 1000（10m）。
+	 * 改动后需重启 PIE 生效（Subsystem 初始化时读取一次并写入 NPC_LeafField）。
 	 */
 	UPROPERTY(EditAnywhere, config, Category = "VelocityField",
 		meta = (ClampMin = "100.0", ClampMax = "2000.0", ForceUnits = "cm",
-		        ToolTip = "速度场覆盖范围（cm，正方形边长）。改动后需重启 PIE 生效（Subsystem 初始化时读取一次）。"))
+		        ToolTip = "速度场覆盖范围（cm，正方形边长）。改动后需重启 PIE 生效。"))
 	float VelocityFieldWidth = 1000.f;
 
 	/**
@@ -74,8 +60,8 @@ public:
 	 * 风速编码基准 / 速度上限（cm/s）。
 	 *
 	 * VelocityRT 以 RG8 格式编码：NormVel = rawVel / WindMaxSpeed，
-	 * Niagara 解码时乘回来。编码端（Splat）和解码端（Niagara）必须用同一个值，
-	 * 因此这个参数必须全局一致。
+	 * WindInteraction 模块解码时乘回来。编码端（Splat）和解码端（模块）必须用同一个值，
+	 * 因此这个参数必须全局一致，同时写入 NPC_LeafField。
 	 *
 	 * 典型值：1000（默认）。调大可支持更高风速但降低低速精度。
 	 */
