@@ -14,6 +14,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 
 #include "NiagaraParameterCollection.h"
+#include "NiagaraFunctionLibrary.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogLeafField, Log, All);
 
@@ -86,15 +87,15 @@ void ULeafFieldSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	// NPC_LeafField 资产不存在时静默跳过，Splat 管线仍正常运行。
 	if (UNiagaraParameterCollection* NPC = LoadObject<UNiagaraParameterCollection>(nullptr, *NPCAssetPath))
 	{
-		NPCInstance = GetWorld()->GetNiagaraParameterCollectionInstance(NPC);
+		// 通过已导出的函数库获取 NPC 世界实例（FNiagaraWorldManager::GetParameterCollection 未导出，跨模块不可用）
+		NPCInstance = UNiagaraFunctionLibrary::GetNiagaraParameterCollection(GetWorld(), NPC);
 		if (NPCInstance)
 		{
-			NPCInstance->SetFloatParameter(FName("VelocityFieldWidth"), VelocityFieldWidth);
-			NPCInstance->SetFloatParameter(FName("WindMaxSpeed"),        WindMaxSpeed);
-			if (VelocityRT)
-			{
-				NPCInstance->SetTextureParameter(FName("VelocityRT"), VelocityRT);
-			}
+			// 友好名（不带命名空间），setter 内部会自动补全 NPC 全名
+			NPCInstance->SetFloatParameter(TEXT("VelocityFieldWidth"), VelocityFieldWidth);
+			NPCInstance->SetFloatParameter(TEXT("WindMaxSpeed"),       WindMaxSpeed);
+			// 注意：NPC 不支持纹理参数，速度场 RT 由 WindInteraction 模块直接引用
+			// RT_VelocityField 资产采样，无需经过 NPC 广播。
 			UE_LOG(LogLeafField, Log, TEXT("[LeafField] NPC_LeafField initialized (Width=%.0f MaxSpeed=%.0f)"),
 				VelocityFieldWidth, WindMaxSpeed);
 		}
@@ -174,7 +175,7 @@ void ULeafFieldSubsystem::Tick(float DeltaTime)
 	// NPC 每帧写入动态参数（供 WindInteraction 模块直接读取）
 	if (NPCInstance)
 	{
-		NPCInstance->SetVectorParameter(FName("VelocityFieldCenter"), VelocityFieldCenter);
+		NPCInstance->SetVectorParameter(TEXT("VelocityFieldCenter"), VelocityFieldCenter);
 	}
 }
 
