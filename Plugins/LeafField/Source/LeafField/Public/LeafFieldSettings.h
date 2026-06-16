@@ -24,7 +24,7 @@ public:
 		meta = (ClampMin = "64", ClampMax = "512"))
 	int32 VelocityFieldRTSize = 256;
 
-	// RG8 编码基准（cm/s）。编解码两端必须一致，勿随意修改
+	// RG8 编码基准（cm/s）。决定速度场能表达的最大速度，通常保持默认值 1000，若角色移速远超 1000 cm/s 可适当调大
 	UPROPERTY(EditAnywhere, config, Category = "Wind",
 		meta = (ClampMin = "100.0", ClampMax = "5000.0", ForceUnits = "cm/s"))
 	float WindMaxSpeed = 1000.f;
