@@ -22,7 +22,7 @@
 
 1. 打开目标 Niagara System
 2. 在 **Solve Forces and Velocity** 之前插入模块：
-   - 模块路径：`Plugins/LeafField Content/LeafField/WindInteraction`
+   - 模块路径：`Plugins/LeafField Content/LeafField/Wind_Interaction`
 3. 模块添加后，将 `VelocityRT` 槽位的纹理拖入：
    - 纹理路径：`Plugins/LeafField Content/LeafField/RT_VelocityField`
 
@@ -36,12 +36,10 @@ Play 后操控角色走过粒子区域，即可看到交互效果。
 
 | 资产 | 路径 |
 |------|------|
-| `RT_VelocityField` | `Plugins/LeafField Content/LeafField/RT_VelocityField` |
-| `WindInteraction`（Niagara 模块） | `Plugins/LeafField Content/LeafField/WindInteraction` |
+| `RT_VelocityField`（速度场纹理） | `Plugins/LeafField Content/LeafField/RT_VelocityField` |
+| `Wind_Interaction`（Niagara 模块） | `Plugins/LeafField Content/LeafField/Wind_Interaction` |
 | `NPC_LeafField`（Niagara 参数集） | `Plugins/LeafField Content/LeafField/NPC_LeafField` |
 | `M_FluidSplat`（速度场写入材质） | `Plugins/LeafField Content/LeafField/M_FluidSplat` |
-
-> 在内容浏览器左上角勾选「显示插件内容」后可看到上述路径。
 
 ---
 
@@ -49,23 +47,23 @@ Play 后操控角色走过粒子区域，即可看到交互效果。
 
 ### 角色组件（Leaf Interaction Source）
 
-选中组件后切换到「所有」Tab，`LeafField` 分类下可见：
+选中组件后，`LeafField` 分类下可见：
 
-| 参数 | 默认值 | 怎么调 |
-|------|--------|--------|
-| `BrushRadiusWorld` | 200 cm | 角色影响周围粒子的范围。觉得影响范围太小就调大，太大就调小 |
-| `VelocityStrength` | 1.0 | 角色移动对粒子的推力。叶子被吹得不够猛就调大，太夸张就调小 |
-| `VelocityDecayTime` | 0.1 s | 角色停步后推力消散的时间。0 = 停步立即没风；调大（如 0.5）= 停步后有余风慢慢消散 |
-| `bUsePeakHold` | true | 保持 true 即可。改为 false 后角色起步时会有迟钝感 |
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `BrushRadiusWorld` | 200 cm | 速度写入的影响半径，越大扰动范围越广 |
+| `VelocityStrength` | 1.0 | 速度写入倍率，值越大粒子被推动得越猛烈 |
+| `VelocityDecayTime` | 0.1 s | 停步后速度衰减时间。0 = 立即归零；增大则停步后有余风拖尾效果 |
+| `bUsePeakHold` | true | 建议保持 true。起步时推力立即生效，停步时柔和消散；false 则起步也有延迟 |
 
 ### Niagara 模块（WindInteraction）
 
-| 参数 | 默认值 | 怎么调 |
-|------|--------|--------|
-| `WindStrength` | 1.0 | 粒子整体被吹动的强度。粒子反应太弱调大，太飘调小 |
-| `WindLift` | 0.1 | 粒子被吹起时向上飘的程度。0 = 水平吹动不上飘；调大（如 0.3）= 粒子会被吹起来 |
-| `WindResponseSpeed` | 5.0 | 粒子跟上风场的快慢。调大 = 反应灵敏，调小 = 反应迟缓柔和 |
-| `WindSpinScale` | 0.5 | 粒子在风中的旋转速度。1.0 = 不变；小于 1 = 旋转变慢；大于 1 = 旋转加速 |
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `WindStrength` | 1.0 | 粒子响应风场的整体强度 |
+| `WindLift` | 0.1 | 粒子受风时向上飘起的强度。0 = 纯水平运动，增大则粒子会被吹起 |
+| `WindResponseSpeed` | 5.0 | 粒子速度跟随风场的响应速度。值越大反应越灵敏，值越小过渡越柔和 |
+| `WindSpinScale` | 0.5 | 粒子受风时的旋转速度缩放。1.0 = 不变；小于 1 减弱旋转；大于 1 加强旋转 |
 
 ### 项目设置（编辑 → 项目设置 → 插件 → Leaf Field）
 
@@ -75,4 +73,4 @@ Play 后操控角色走过粒子区域，即可看到交互效果。
 |------|--------|------|
 | `VelocityFieldWidth` | 1000 cm | 速度场覆盖的范围（以玩家为中心的正方形区域），超出范围的角色不会产生影响 |
 | `VelocityFieldRTSize` | 256 px | 速度场精度，通常 256 够用 |
-| `WindMaxSpeed` | 1000 cm/s | **勿修改**，改了会导致风向错乱 |
+| `WindMaxSpeed` | 1000 cm/s | 速度场能表达的最大速度上限，通常保持默认值 |
