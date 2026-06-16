@@ -175,10 +175,10 @@ void ULeafFieldSubsystem::Tick(float DeltaTime)
 		}
 	}
 
-	// Clear → Splat（无 Source 时跳过，RT 保持零速）
+	// 每帧无条件清零，保证 Source 全部离开后 RT 归零（避免幽灵风）
+	UKismetRenderingLibrary::ClearRenderTarget2D(this, VelocityRT, LeafFieldSplatParam::ZeroVelocityColor);
 	if (Sources.Num() > 0 && SplatMID)
 	{
-		UKismetRenderingLibrary::ClearRenderTarget2D(this, VelocityRT, LeafFieldSplatParam::ZeroVelocityColor);
 		SplatPass();
 	}
 
