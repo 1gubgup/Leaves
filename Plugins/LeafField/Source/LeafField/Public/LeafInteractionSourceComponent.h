@@ -1,20 +1,10 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
-
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "LeafInteractionSourceComponent.generated.h"
 
-/**
- * 落叶交互的"扰动源"组件，挂在角色（或任何会扇起叶子的 Actor）身上。
- *
- * 职责：
- *   - 在 ULeafFieldSubsystem 中登记/注销自己
- *   - 通过 Owner 位置差分得出当前帧速度，供 Subsystem 写入全局速度场
- *
- * 不直接读写 RT，不依赖 Movement Component。
- */
+// 挂在角色身上，自动向 LeafFieldSubsystem 注册，提供每帧移动速度用于写入速度场
 UCLASS(ClassGroup = (FX), meta = (BlueprintSpawnableComponent))
 class LEAFFIELD_API ULeafInteractionSourceComponent : public UActorComponent
 {
@@ -23,30 +13,24 @@ class LEAFFIELD_API ULeafInteractionSourceComponent : public UActorComponent
 public:
 	ULeafInteractionSourceComponent();
 
-	/** Splat 笔刷半径（世界单位，cm）。与 VelocityFieldWidth 无关，改 VelocityFieldWidth 后此值不需要手动重算。典型值：100~350 cm */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField",
-		meta = (ClampMin = "1.0", ClampMax = "5000.0", Units = "cm"))
+	// 角色影响周围粒子的范围半径，调大则更远处的粒子也会被扰动
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField", meta = (ClampMin = "1.0", ClampMax = "5000.0", Units = "cm"))
 	float BrushRadiusWorld = 200.f;
 
-	/** 速度倍率，调大让叶子被扇得更猛 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField",
-		meta = (ClampMin = "0.0"))
+	// 角色移动对粒子的推力倍率，调大叶子被吹得更猛
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField", meta = (ClampMin = "0.0"))
 	float VelocityStrength = 1.0f;
 
-	/** 速度衰减时间常数（秒）。0 = 瞬时无衰减；0.2~0.3 = 短促拖尾；0.6~1.0 = 风过留香 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField",
-		meta = (ClampMin = "0.0"))
+	// 角色停步后推力消散的时间（秒）。0 = 立刻消失；调大则停步后有余风效果
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField", meta = (ClampMin = "0.0"))
 	float VelocityDecayTime = 0.1f;
 
-	/** 峰值保持：起步零延迟、停步柔和衰减（推荐 true）；false = 纯低通（起步也有延迟） */
+	// 保持 true。起步时推力立即生效，停步时柔和消散
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LeafField")
 	bool bUsePeakHold = true;
 
-	/** 当前帧速度（cm/s，世界空间 XY） */
 	FVector2D GetVelocityXY() const { return CachedVelocityXY; }
-
-	/** Owner 世界位置 */
-	FVector GetSourceWorldLocation() const;
+	FVector   GetSourceWorldLocation() const;
 
 protected:
 	virtual void BeginPlay() override;
@@ -54,7 +38,7 @@ protected:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 private:
-	FVector PrevLocation = FVector::ZeroVector;
+	FVector   PrevLocation     = FVector::ZeroVector;
 	FVector2D CachedVelocityXY = FVector2D::ZeroVector;
-	bool bHasPrevLocation = false;
+	bool      bHasPrevLocation = false;
 };

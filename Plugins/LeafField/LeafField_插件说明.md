@@ -1,138 +1,57 @@
-# LeafField 落叶交互插件
+# LeafField 插件说明
 
-## 一、功能概述
-
-提供一套**速度场驱动机制**，供任意 Niagara System 通过 `WindInteraction` 模块接入：
-
-- 角色经过时，速度被写入全局速度场 RT；
-- Niagara System 挂载 `WindInteraction` 模块后，粒子自动采样速度场获得风速并被吹动。
-
-**数据流：**
-```
-角色移动 → ULeafInteractionSourceComponent 计算速度
-        → ULeafFieldSubsystem 每帧 Splat → VelocityRT
-        → NPC_LeafField.VelocityFieldCenter / VelocityRT 每帧更新
-        → WindInteraction 模块从 NPC 读取参数 → 粒子受力
-```
+角色移动时，`LeafInteractionSource` 组件将速度写入全局速度场 RT（`RT_VelocityField`），Niagara 粒子通过 `WindInteraction` 模块采样该 RT，产生随角色移动而扰动的交互效果。
 
 ---
 
-## 二、技术方案
+## 使用步骤
 
-| 技术点 | 用途 |
-|--------|------|
-| **RenderTarget（速度场，RG8）** | 全局一张，记录角色移动产生的风速 |
-| **DrawMaterialToRenderTarget** | 使用 Splat 材质将角色速度绘制进速度场 RT |
-| **Niagara Parameter Collection** | 全局参数共享，WindInteraction 模块直接读取，无需 User 参数中转 |
-| **WorldSubsystem** | 每帧维护速度场并向 NPC 写入参数 |
-| **DeveloperSettings** | 项目设置中的全局配置项 |
+**第一步：给角色添加组件**
 
----
+在角色蓝图的组件列表中添加 `Leaf Interaction Source`，无需其他配置，运行时自动生效。
 
-## 三、模块构成
+**第二步：给 Niagara 添加模块**
 
-### C++ 类
+打开目标 Niagara System，在 **Solve Forces and Velocity** 之前插入 `WindInteraction` 模块。
 
-| 类 | 职责 |
-|----|------|
-| `ULeafFieldSettings` | 全局项目设置：速度场尺寸、RT 分辨率、风速编码基准 |
-| `ULeafFieldSubsystem` | 全局枢纽：每帧清空并绘制速度场，向 NPC_LeafField 写入参数 |
-| `ULeafInteractionSourceComponent` | 扰动源组件：挂在角色上，通过位置差分计算每帧速度 |
+将模块中 `VelocityRT` 槽位的纹理选择为 `RT_VelocityField`。
 
-### 内容资产（路径硬编码，不可移动或重命名）
+**第三步：运行**
 
-```
-Plugins/LeafField/Content/LeafField/
-├── RT_VelocityField    速度场渲染目标，RG8 格式，清屏色必须为 (0.5, 0.5, 0, 1)
-├── M_FluidSplat        Splat 材质，参数：SplatCenterUV / SplatRadiusUV / SplatVelocity
-├── NPC_LeafField       Niagara Parameter Collection，向所有挂了 WindInteraction 的 System 广播参数
-└── WindInteraction     Niagara Module Script，从 NPC_LeafField 读取参数，驱动粒子受力
-```
-
-### NPC_LeafField 参数表
-
-| 参数名 | 类型 | 说明 |
-|--------|------|------|
-| `VelocityRT` | Texture Object | 速度场 RT，启动时写入一次 |
-| `VelocityFieldCenter` | Vector | 速度场中心世界坐标，每帧更新 |
-| `VelocityFieldWidth` | Float | 速度场覆盖边长（cm），启动时写入一次 |
-| `WindMaxSpeed` | Float | 速度场 RG8 编码基准（cm/s），启动时写入一次 |
+Play 后操控角色走过粒子区域，即可看到粒子对角色移动产生响应。
 
 ---
 
-## 四、接入方式
+## 可调参数
 
-### WindInteraction 模块（随插随用）
+### 组件参数（挂在角色身上）
 
-1. 在自己的 Niagara System 的 **Particle Update** 阶段添加 `WindInteraction` 模块；
-2. 确认模块输入引脚绑定到 `NPC_LeafField` 对应参数（非 User 参数）；
-3. **完成**。无需任何 C++ 对接代码，参数由 `ULeafFieldSubsystem` 自动维护。
+在角色蓝图中选中 `Leaf Interaction Source` 组件，切换到「所有」Tab，`LeafField` 分类下可见：
 
-### 扰动源（角色接入）
+| 参数 | 默认值 | 怎么调 |
+|------|--------|--------|
+| `BrushRadiusWorld` | 200 cm | 角色周围多大范围的粒子会被影响。觉得影响范围太小就调大，太大就调小 |
+| `VelocityStrength` | 1.0 | 角色移动对粒子的推力。觉得叶子被吹得不够猛就调大，太夸张就调小 |
+| `VelocityDecayTime` | 0.1 s | 角色停步后，推力消失的快慢。0 = 停步立即没有风；调大（如 0.5）= 停步后风力慢慢消散，有"余风"感 |
+| `bUsePeakHold` | true | 保持 true 即可。改为 false 后角色起步时会有一点迟钝感 |
 
-在角色 Blueprint 上添加 `LeafInteractionSourceComponent` 组件，调整以下参数：
+### 模块参数（在 Niagara 模块里调）
 
-| 参数 | 默认 | 说明 |
-|------|------|------|
-| `BrushRadiusWorld` | 200 cm | 速度 Splat 笔刷半径 |
-| `VelocityStrength` | 1.0 | 速度倍率 |
-| `VelocityDecayTime` | 0.1 s | 停止移动后速度衰减时长 |
-| `bUsePeakHold` | true | 峰值保持：起步零延迟，停步柔和衰减 |
+在 Niagara System 中选中 `WindInteraction` 模块可见：
 
-### 引擎模块依赖
+| 参数 | 默认值 | 怎么调 |
+|------|--------|--------|
+| `WindStrength` | 1.0 | 粒子整体被吹动的强度。觉得粒子反应太弱调大，太飘调小 |
+| `WindLift` | 0.1 | 粒子被吹起时向上飘的程度。0 = 完全平移不上飘；调大（如 0.3）= 粒子会被明显吹起来 |
+| `WindResponseSpeed` | 5.0 | 粒子速度跟上风场的快慢。调大 = 粒子反应更灵敏，调小 = 粒子反应更迟缓柔和 |
+| `WindSpinScale` | 0.5 | 粒子在风中的旋转速度。1.0 = 旋转不变；小于 1 = 被吹时旋转变慢；大于 1 = 被吹时旋转加速 |
 
-```
-Niagara / NiagaraCore / RenderCore / DeveloperSettings / Engine / CoreUObject
-```
+### 全局设置（项目设置 → 插件 → Leaf Field）
 
----
+改动后需重启 PIE 生效。通常不需要动。
 
-## 五、全局配置（项目设置 → 插件 → Leaf Field）
-
-| 参数 | 默认 | 说明 |
-|------|------|------|
-| `VelocityFieldWidth` | 1000 cm | 速度场覆盖边长，以本地玩家为中心，改后需重启 PIE |
-| `VelocityFieldRTSize` | 256 | 速度场 RT 分辨率（px），改后需重启 PIE |
-| `WindMaxSpeed` | 1000 cm/s | RG8 编码基准；编解码两端必须一致，**勿随意修改** |
-
----
-
-## 六、WindInteraction 模块参数说明
-
-### 来自 NPC（自动注入，无需手动绑定）
-
-| 参数 | 说明 |
-|------|------|
-| `VelocityRT` | 速度场 RT |
-| `VelocityFieldCenter` | 速度场中心（每帧跟随玩家） |
-| `VelocityFieldWidth` | 速度场覆盖范围 |
-| `WindMaxSpeed` | 编解码基准 |
-
-### 模块内部可调（直接在 Niagara 编辑器中调整）
-
-| 参数 | 默认 | 说明 |
-|------|------|------|
-| `WindStrength` | 1.0 | 风强倍率（0=无风，2=双倍） |
-| `WindLift` | 0.05 | 水平风速转垂直上抬力比例 |
-| `WindResponseSpeed` | 5.0 | 粒子跟随风场的响应速度（帧率无关） |
-| `WindSpinImpulse` | 1.0 | 被风吹起时的翻滚冲量强度 |
-
----
-
-## 七、目录结构
-
-```
-Plugins/LeafField/
-├── LeafField.uplugin
-├── LeafField_插件说明.md
-└── Source/LeafField/
-    ├── Public/
-    │   ├── LeafFieldSettings.h               全局项目设置
-    │   ├── LeafFieldSubsystem.h              世界子系统（速度场 + NPC 写入）
-    │   └── LeafInteractionSourceComponent.h  扰动源组件（挂在角色上）
-    └── Private/
-        ├── LeafFieldModule.cpp
-        ├── LeafFieldSettings.cpp
-        ├── LeafFieldSubsystem.cpp
-        └── LeafInteractionSourceComponent.cpp
-```
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `VelocityFieldWidth` | 1000 cm | 速度场覆盖的范围（以玩家为中心），超出范围的角色不会产生影响 |
+| `VelocityFieldRTSize` | 256 px | 速度场精度，通常 256 够用 |
+| `WindMaxSpeed` | 1000 cm/s | **勿修改**，编解码基准值，改了会导致风向错乱 |
