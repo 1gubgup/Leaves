@@ -16,7 +16,7 @@
 #include "NiagaraSystem.h"
 #include "NiagaraFunctionLibrary.h"
 
-DEFINE_LOG_CATEGORY_STATIC(LogLeafField, Log, All);
+DEFINE_LOG_CATEGORY_STATIC(LogLeafInteractionField, Log, All);
 
 // ============================================================
 // Niagara User Parameter 名（与 N_LeafField 资产一一对应）
@@ -119,7 +119,7 @@ void ALeafInteractionField::BeginPlay()
 	}
 	else if (!LeafSystem)
 	{
-		UE_LOG(LogLeafField, Warning,
+		UE_LOG(LogLeafInteractionField, Warning,
 			TEXT("[LeafField] %s has no LeafSystem assigned. Field will be inert."),
 			*GetName());
 	}
@@ -190,7 +190,7 @@ void ALeafInteractionField::EnsureHeightCaptured()
 
 	if (!HeightRT)
 	{
-		UE_LOG(LogLeafField, Warning, TEXT("[LeafField] %s: failed to create HeightRT"), *GetName());
+		UE_LOG(LogLeafInteractionField, Warning, TEXT("[LeafField] %s: failed to create HeightRT"), *GetName());
 		return;
 	}
 
@@ -225,12 +225,12 @@ void ALeafInteractionField::ActivateField()
 
 	if (!NiagaraComponent || !LeafSystem)
 	{
-		UE_LOG(LogLeafField, Warning, TEXT("[LeafField] %s ActivateField failed: NiagaraComponent=%d LeafSystem=%d"),
+		UE_LOG(LogLeafInteractionField, Warning, TEXT("[LeafField] %s ActivateField failed: NiagaraComponent=%d LeafSystem=%d"),
 			*GetName(), NiagaraComponent != nullptr, LeafSystem != nullptr);
 		return;
 	}
 
-	UE_LOG(LogLeafField, Log, TEXT("[LeafField] %s ActivateField called"), *GetName());
+	UE_LOG(LogLeafInteractionField, Log, TEXT("[LeafField] %s ActivateField called"), *GetName());
 
 	EnsureHeightCaptured();
 
@@ -258,7 +258,7 @@ void ALeafInteractionField::ActivateField()
 	// （这正是"先手动打开一次 Niagara 编辑器把结果烤进 DDC 后再运行就正常"的根因。）
 	if (LeafSystem->HasOutstandingCompilationRequests())
 	{
-		UE_LOG(LogLeafField, Warning,
+		UE_LOG(LogLeafInteractionField, Warning,
 			TEXT("[LeafField] %s: NiagaraSystem compiling, will re-activate after compile complete"), *GetName());
 		LeafSystem->OnSystemCompiled().RemoveAll(this);  // 防重复注册
 		LeafSystem->OnSystemCompiled().AddUObject(this, &ALeafInteractionField::OnNiagaraCompiled);
@@ -275,7 +275,7 @@ void ALeafInteractionField::OnNiagaraCompiled(UNiagaraSystem* InSystem)
 
 	if (NiagaraComponent && State == ELeafFieldState::Active)
 	{
-		UE_LOG(LogLeafField, Log, TEXT("[LeafField] %s: NiagaraSystem compiled, activating now"), *GetName());
+		UE_LOG(LogLeafInteractionField, Log, TEXT("[LeafField] %s: NiagaraSystem compiled, activating now"), *GetName());
 
 		if (UWorld* World = GetWorld())
 		{
@@ -386,7 +386,7 @@ void ALeafInteractionField::PushStaticParams()
 	NiagaraComponent->SetVariableVec3(LeafFieldNiagara::N_MeshThresholds, Thresholds);
 
 	// [临时调试] 确认 C++ 端算出并推送的阈值；定位完成后可删除此行。
-	UE_LOG(LogLeafField, Warning,
+	UE_LOG(LogLeafInteractionField, Warning,
 		TEXT("[LeafField] %s PushThresholds TotalWeight=%.2f Thresholds=(%.3f, %.3f, %.3f)"),
 		*GetName(), TotalWeight, Thresholds.X, Thresholds.Y, Thresholds.Z);
 

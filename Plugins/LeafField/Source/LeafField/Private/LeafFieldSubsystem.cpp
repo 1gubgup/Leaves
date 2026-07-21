@@ -14,7 +14,7 @@
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
-DEFINE_LOG_CATEGORY_STATIC(LogLeafField, Log, All);
+DEFINE_LOG_CATEGORY_STATIC(LogLeafFieldSubsystem, Log, All);
 
 // ============================================================
 // 常量
@@ -76,7 +76,7 @@ void ULeafFieldSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	}
 	else
 	{
-		UE_LOG(LogLeafField, Warning, TEXT("[LeafField] Splat material not found: %s"), *SplatMaterialPath);
+		UE_LOG(LogLeafFieldSubsystem, Warning, TEXT("[LeafField] Splat material not found: %s"), *SplatMaterialPath);
 	}
 }
 
